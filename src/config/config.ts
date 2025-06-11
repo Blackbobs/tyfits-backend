@@ -7,7 +7,10 @@ interface Config {
   nodeEnv: string;
   secretKey: string;
   MONGO_URI: string;
-  refreshKey: string
+  refreshKey: string;
+  clodinaryCloudName: string;
+  clodinaryApiKey: string;
+  clodinaryApiSecret: string;
 }
 
 const config: Config = {
@@ -15,7 +18,10 @@ const config: Config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   secretKey: process.env.JWT_SECRET_KEY  as string,
   MONGO_URI: process.env.MONGO_URI!,
-  refreshKey: process.env.REFRESH_TOKEN_SECRET_KEY as string
+  refreshKey: process.env.REFRESH_TOKEN_SECRET_KEY as string,
+  clodinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME as string,
+  clodinaryApiKey: process.env.CLOUDINARY_API_KEY as string,
+  clodinaryApiSecret: process.env.CLOUDINARY_API_SECRET as string,
 };
 
 export default config;

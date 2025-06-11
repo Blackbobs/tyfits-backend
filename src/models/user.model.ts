@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { IUsers } from '../types/types';
+import { IUser } from '../types/types';
 
 const UserSchema = new Schema(
   {
@@ -18,4 +18,4 @@ const UserSchema = new Schema(
   { timestamps: true },
 );
 
-export default mongoose.model<IUsers>('Users', UserSchema)
+export default mongoose.model<IUser>('Users', UserSchema)
