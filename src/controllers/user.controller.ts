@@ -5,8 +5,24 @@ import config from '../config/config';
 import jwt from 'jsonwebtoken';
 import { Role } from '../types/types';
 
-// Get all users
-const getAllUsers = async () => {};
+
+
+export const getAllCustomers = async (req: Request, res: Response) => {
+  try {
+    const customers = await User.find({ role: 'customer' }).select('-password');
+    res.status(200).json({
+      message: 'Customers retrieved successfully',
+      customers,
+    });
+  } catch (error) {
+    console.error('Error fetching customers:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error. Please try again.',
+    });
+  }
+};
+
 
 // create a user
 export const signUp = async (req: Request, res: Response): Promise<void> => {
@@ -64,7 +80,13 @@ export const signUp = async (req: Request, res: Response): Promise<void> => {
 
 export const signIn = async (req: Request, res: Response): Promise<void> => {
   try {
+    
     const { email, password } = req.body;
+
+     if (!email || !password) {
+      res.status(400).json({ message: 'Email and password are required' });
+      return;
+    }
 
     const user = await User.findOne({ email });
     if (!user) {
@@ -86,7 +108,7 @@ export const signIn = async (req: Request, res: Response): Promise<void> => {
         role: user?.role,
       },
       config.secretKey,
-      { expiresIn: '15m' },
+      { expiresIn: '7d' },
     );
 
     // TODO: save refresh token in the database or memory

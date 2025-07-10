@@ -4,13 +4,14 @@ import Product from '../models/product.model';
 import { uploadToCloudinary } from '../utils/Uploader';
 import cloudinary from '../config/cloudinary';
 
-
-export const createProduct = async (
-  req: Request,
-  res: Response,
-): Promise<void> => {
+export const createProduct = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { title, description, price, isDigital, stock } = req.body;
+    const { title, description, price, stock, type } = req.body;
+
+    if (!type || !Object.values(ProductType).includes(type)) {
+      res.status(400).json({ message: 'Invalid or missing product type' });
+      return;
+    }
 
     const createdBy = req.userInfo?.id;
     if (!createdBy) {
@@ -18,20 +19,19 @@ export const createProduct = async (
       return;
     }
 
-    
-    if (isDigital === 'true' || isDigital === true) {
-      if (!req.file) {
+    if (type === ProductType.digital) {
+      const file = (req.files as { [fieldname: string]: Express.Multer.File[] })?.file?.[0];
+      if (!file) {
         res.status(400).json({ message: 'Digital product file is required' });
         return;
       }
 
-      const uploadedFile = await uploadToCloudinary(req.file.path);
-
+      const uploadedFile = await uploadToCloudinary(file.path);
       const newDigitalProduct = await Product.create({
         title,
         description,
         price,
-        type: ProductType.digital,
+        type,
         createdBy,
         file: {
           url: uploadedFile.url,
@@ -46,21 +46,21 @@ export const createProduct = async (
       return;
     }
 
-    
-    if (!req.files || !(req.files instanceof Array)) {
+    const images = (req.files as { [fieldname: string]: Express.Multer.File[] })?.images;
+    if (!images || !images.length) {
       res.status(400).json({ message: 'Product images are required' });
       return;
     }
 
     const uploadedImages = await Promise.all(
-      req.files.map((file: Express.Multer.File) => uploadToCloudinary(file.path))
+      images.map((file) => uploadToCloudinary(file.path)),
     );
 
     const newProduct = await Product.create({
       title,
       description,
       price,
-      type: ProductType.physical,
+      type,
       stock: stock ?? 0,
       createdBy,
       images: uploadedImages.map(({ url, publicId }) => ({ url, publicId })),
@@ -70,10 +70,35 @@ export const createProduct = async (
       message: 'Product created successfully',
       product: newProduct,
     });
-
   } catch (error) {
-    console.error('Error creating product:', error);
+    console.log('Error creating product:', error);
     res.status(500).json({ message: 'Server error. Failed to create product.' });
+  }
+};
+
+
+export const getAllProducts = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const products = await Product.find().sort({ createdAt: -1 });
+    res.status(200).json({ message: 'Products fetched successfully', products });
+  } catch (error) {
+    console.log('Error fetching all products:', error);
+    res.status(500).json({ message: 'Server error. Failed to fetch products.' });
+  }
+};
+
+export const getProductById = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const product = await Product.findById(id);
+    if (!product) {
+      res.status(404).json({ message: 'Product not found' });
+      return;
+    }
+    res.status(200).json({ message: 'Product fetched successfully', product });
+  } catch (error) {
+    console.log('Error fetching product by ID:', error);
+    res.status(500).json({ message: 'Server error. Failed to fetch product.' });
   }
 };
 
@@ -88,22 +113,18 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    
     if (product.type === ProductType.digital) {
       if (req.file) {
-      
         if (product.file?.publicId) {
           await cloudinary.uploader.destroy(product.file.publicId);
         }
 
-        // Upload new file
         const uploadedFile = await uploadToCloudinary(req.file.path);
         product.file = {
           url: uploadedFile.url,
           publicId: uploadedFile.publicId,
         };
       }
-
     } else {
       if (req.files && req.files instanceof Array) {
         if (product.images?.length) {
@@ -113,17 +134,10 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
         }
 
         const uploadedImages = await Promise.all(
-          req.files.map((file: Express.Multer.File) =>
-            uploadToCloudinary(file.path)
-          )
+          req.files.map((file: Express.Multer.File) => uploadToCloudinary(file.path))
         );
-        product.images = uploadedImages.map(({ url, publicId }) => ({
-          url,
-          publicId,
-        }));
+        product.images = uploadedImages.map(({ url, publicId }) => ({ url, publicId }));
       }
-
-      
       if (stock !== undefined) {
         product.stock = stock;
       }
@@ -135,28 +149,22 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
 
     await product.save();
 
-    res.status(200).json({
-      message: 'Product updated successfully',
-      product,
-    });
+    res.status(200).json({ message: 'Product updated successfully', product });
   } catch (error) {
-    console.error('Error updating product:', error);
+    console.log('Error updating product:', error);
     res.status(500).json({ message: 'Server error. Failed to update product.' });
   }
 };
 
-
 export const deleteProduct = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-
     const product = await Product.findById(id);
     if (!product) {
       res.status(404).json({ message: 'Product not found' });
       return;
     }
 
-    
     if (product.type === ProductType.digital && product.file?.publicId) {
       await cloudinary.uploader.destroy(product.file.publicId);
     } else if (product.images?.length) {
@@ -166,11 +174,11 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
     }
 
     await Product.findByIdAndDelete(id);
-
     res.status(200).json({ message: 'Product deleted successfully' });
   } catch (error) {
-    console.error('Error deleting product:', error);
+    console.log('Error deleting product:', error);
     res.status(500).json({ message: 'Failed to delete product' });
   }
 };
+
 
