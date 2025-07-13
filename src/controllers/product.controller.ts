@@ -3,6 +3,7 @@ import { ProductType } from '../types/types';
 import Product from '../models/product.model';
 import { uploadToCloudinary } from '../utils/Uploader';
 import cloudinary from '../config/cloudinary';
+import mongoose from 'mongoose';
 
 export const createProduct = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -90,6 +91,10 @@ export const getAllProducts = async (req: Request, res: Response): Promise<void>
 export const getProductById = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({ message: 'Invalid product ID format' });
+      return;
+    }
     const product = await Product.findById(id);
     if (!product) {
       res.status(404).json({ message: 'Product not found' });

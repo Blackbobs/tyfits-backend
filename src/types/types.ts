@@ -55,7 +55,7 @@
   }
 
   export interface ICartItem {
-    product: Types.ObjectId;
+    product: IProducts;
     quantity: number;
   }
 

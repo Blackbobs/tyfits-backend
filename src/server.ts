@@ -6,6 +6,7 @@ import usersRouter from "./routes/users.routes";
 import connectDB from "./config/db";
 import errorMiddleware from "./middlewares/error.middleware";
 import productsRouter from "./routes/products.routes";
+import cartRouter from "./routes/cart.routes";
 // import { stripeWebhook } from "./controllers/checkout.controller";
 // import bodyParser from "body-parser";
 
@@ -29,6 +30,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use('/api/v1/users', usersRouter)
 app.use('/api/v1/products', productsRouter);
+app.use('/api/v1/cart', cartRouter);
 
 app.use('/', (_req, res) =>{
     res.send("Welcome to hub digital")
