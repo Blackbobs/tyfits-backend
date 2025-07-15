@@ -1,179 +1,197 @@
-// import { Request, Response } from "express";
-// import Cart from "../models/cart.model";
-// import Order from "../models/order.model";
+// controllers/checkout.controller.ts
+import { Request, Response } from "express";
+import Cart from "../models/cart.model";
+import Order from "../models/order.model";
+import { IProducts, OrderStatus } from "../types/types";
+import sendEmail from "../utils/sendEmail";
+import Stripe from "stripe";
 
-// import { IProducts, OrderStatus } from "../types/types";
-// import sendEmail from "../utils/sendEmail";
-// import Stripe from "stripe";
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
-// export const createCheckoutSession = async (req: Request, res: Response) => {
-//     try {
-//         const userId = req.userInfo?.id
-//         const userEmail = req.userInfo?.email
-//         const cart = await Cart.findOne({ userId }).populate<{ items: { product: IProducts, quantity: number }[] }>("items.product")
-//         .exec();
-//         if(!cart || cart.items.length === 0) {
-//             res.status(400).json({ message: 'Cart is empty' });
-//             return;
-//         }
+interface ExtendedSessionCreateParams extends Stripe.Checkout.SessionCreateParams {
+  metadata: {
+    userId: string;
+    userEmail: string;
+    cartId: string;
+  };
+}
 
-        
-//         const lineItems = cart.items.map((item) => ({
-//             price_data: {
-//               currency: "usd",
-//               product_data: {
-//                 name: item.product.title,
-//               },
-//               unit_amount: Math.round(item.product.price * 100),
-//             },
-//             quantity: item.quantity,
-//           }));
-
-//           const session = await stripe.checkout.sessions.create({
-//             payment_method_types: ["card"],
-//             mode: "payment",
-//             line_items: lineItems,
-//             // success_url: `${config.clientUrl}/success`,
-//             // cancel_url: `${config.clientUrl}/cancel`,
-//             metadata: {
-//               userId,
-//               userEmail
-//             },
-//           });
-      
-//           res.status(200).json({ url: session.url });
-              
-//     } catch (error) {
-//         console.log('Error creating checkout session:', error);
-//         res.status(500).json({ message: 'Internal server error' });
-//     }
-// }
-
-
-
-
-
-// const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-
-// export const stripeWebhook = async (req: Request, res: Response): Promise<void> => {
-//   const sig = req.headers["stripe-signature"];
-
-//   let event: Stripe.Event;
-
-//   try {
-//     event = stripe.webhooks.constructEvent(
-//       req.body,
-//       sig!,
-//       process.env.STRIPE_WEBHOOK_SECRET!
-//     );
-//   } catch (err) {
-//     const errorMessage = err instanceof Error ? err.message : String(err);
-//     console.error("Webhook signature verification failed:", errorMessage);
-//     res.status(400).send(`Webhook Error: ${errorMessage}`);
-//     return;
-//   }
-
-//   if (event.type === "payment_intent.succeeded") {
-//     const paymentIntent = event.data.object as Stripe.PaymentIntent;
-//     const metadata = paymentIntent.metadata;
-
-//     try {
-//       const userId = metadata.userId;
-//       const method = paymentIntent.payment_method_types[0] || "stripe";
-//       const reference = paymentIntent.id;
-
-//       const cart = await Cart
-//         .findOne({ user: userId })
-//         .populate("items.product");
-
-//       if (!cart || cart.items.length === 0) {
-//         console.warn("No cart found or empty cart for user:", userId);
-//         res.status(400).json({ message: "Cart is empty" });
-//         return;
-//       }
-
-//       const orderItems: {
-//         product: any;
-//         quantity: number;
-//         price: number;
-//       }[] = [];
-
-//       let totalAmount = 0;
-//       let isDigital = true;
-
-//       for (const item of cart.items) {
-//         const product = item.product as any;
-//         const quantity = item.quantity;
-
-//         if (!product) continue;
-
-//         orderItems.push({
-//           product: product._id,
-//           quantity,
-//           price: product.price,
-//         });
-
-//         totalAmount += product.price * quantity;
-
-//         if (product.type === "physical") {
-//           isDigital = false;
-//           product.stock -= quantity;
-//           await product.save();
-//         }
-//       }
-
-//       const newOrder = await Order.create({
-//         user: userId,
-//         items: orderItems,
-//         totalAmount,
-//         isDigital,
-//         status: OrderStatus.processing,
-//         paymentInfo: {
-//           method,
-//           reference,
-//           status: "success",
-//         },
-//       });
-
-//       cart.items = [];
-//       await cart.save();
-
+export const createCheckoutSession = async (req: Request, res: Response) => {
+  try {
+    const userId = req.userInfo?.id;
+    const userEmail = req.userInfo?.email;
     
-//       await sendEmail({
-//         to: metadata.userEmail,
-//         subject: "Order Confirmation",
-//         html: `
-//           <h2>Thanks for your order!</h2>
-//           <p>Order ID: ${newOrder._id}</p>
-//           <p>Total: $${totalAmount}</p>
-//           <p>You can ${isDigital ? "download your files soon" : "expect delivery shortly"}.</p>
-//         `,
-//       });
+    if (!userId || !userEmail) {
+       res.status(401).json({ message: 'User not authenticated' });
+       return
+    }
 
-//       res.status(200).json({ received: true });
-//     } catch (error) {
-//       console.error("Error creating order:", error);
-//       res.status(500).json({ message: "Internal server error" });
-//     }
-//   }
+    const cart = await Cart.findOne({ userId })
+      .populate<{ items: { product: IProducts, quantity: number }[] }>("items.product")
+      .exec();
 
-//   if (event.type === "payment_intent.payment_failed") {
-//     const paymentIntent = event.data.object as Stripe.PaymentIntent;
-//     console.warn("Payment failed:", paymentIntent.last_payment_error?.message);
-//     res.status(200).json({ received: true });
-//     return;
-//   }
+    if (!cart || cart.items.length === 0) {
+       res.status(400).json({ message: 'Cart is empty' });
+       return
+    }
 
-//   if (event.type === "checkout.session.expired") {
-//     const session = event.data.object as Stripe.Checkout.Session;
-//     console.warn("Checkout session expired:", session.id);
-//     res.status(200).json({ received: true });
-//     return;
-//   }
+    const lineItems = cart.items.map((item) => {
+      if (!item.product) {
+        throw new Error('Product not found in cart item');
+      }
+      
+      return {
+        price_data: {
+          currency: "usd",
+          product_data: {
+            name: item.product.title,
+            images: item.product.images?.map(img => img.url),
+          },
+          unit_amount: Math.round(item.product.price * 100),
+        },
+        quantity: item.quantity,
+      };
+    });
 
-//   res.status(200).json({ received: true });
-// };
+    const params: ExtendedSessionCreateParams = {
+      payment_method_types: ["card"],
+      mode: "payment",
+      line_items: lineItems,
+      success_url: `${process.env.CLIENT_URL}/order/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.CLIENT_URL}/cart`,
+      customer_email: userEmail,
+      metadata: {
+        userId: userId.toString(),
+        userEmail,
+        cartId: cart._id.toString()
+      },
+    };
 
+    const session = await stripe.checkout.sessions.create(params);
+    res.status(200).json({ url: session.url });
+    return
+  } catch (error) {
+    console.error('Error creating checkout session:', error);
+    res.status(500).json({ message: 'Internal server error' });
+    return
+  }
+};
 
-// // Raw body needed for Stripe webhook signature verification
-// // router.post("/stripe/webhook", bodyParser.raw({ type: "application/json" }), handleStripeWebhook);
+export const stripeWebhook = async (req: Request, res: Response): Promise<void> => {
+  const sig = req.headers["stripe-signature"] as string;
+  let event: Stripe.Event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET!
+    );
+    return
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error("Webhook signature verification failed:", errorMessage);
+    res.status(400).send(`Webhook Error: ${errorMessage}`);
+    return;
+  }
+
+  switch (event.type) {
+    case "checkout.session.completed":
+      await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
+      break;
+    case "payment_intent.payment_failed":
+      console.warn("Payment failed:", (event.data.object as Stripe.PaymentIntent).last_payment_error?.message);
+      break;
+    case "checkout.session.expired":
+      console.warn("Checkout session expired:", (event.data.object as Stripe.Checkout.Session).id);
+      break;
+  }
+
+  res.status(200).json({ received: true });
+};
+
+async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
+  try {
+    if (!session.metadata) {
+      throw new Error('No metadata found in session');
+    }
+
+    const { userId, userEmail, cartId } = session.metadata;
+    const method = session.payment_method_types?.[0] || "card";
+    const reference = session.payment_intent as string;
+
+    const cart = await Cart.findById(cartId)
+      .populate("items.product")
+      .exec();
+
+    if (!cart || cart.items.length === 0) {
+      console.warn("No cart found or empty cart for user:", userId);
+      return;
+    }
+
+    const orderItems = cart.items.map(item => {
+      if (!item.product) {
+        throw new Error('Product not found in cart item');
+      }
+      
+      return {
+        product: (item.product as IProducts)._id,
+        quantity: item.quantity,
+        price: (item.product as IProducts).price,
+      };
+    });
+
+    const totalAmount = cart.items.reduce((total, item) => {
+      if (!item.product) return total;
+      return total + (item.product as IProducts).price * item.quantity;
+    }, 0);
+
+    const isDigital = cart.items.every(item => {
+      if (!item.product) return false;
+      return (item.product as IProducts).type === "digital";
+    });
+
+    // Create order
+    const newOrder = await Order.create({
+      user: userId,
+      items: orderItems,
+      totalAmount,
+      isDigital,
+      status: OrderStatus.processing,
+      paymentInfo: {
+        method,
+        reference,
+        status: "success",
+      },
+    });
+
+    // Update product stocks
+    await Promise.all(cart.items.map(async (item) => {
+      const product = item.product as IProducts;
+      if (product.type === "physical" && product.stock !== undefined) {
+        product.stock -= item.quantity;
+        await product.save();
+      }
+    }));
+
+    // Clear cart
+    cart.items = [];
+    await cart.save();
+
+    // Send confirmation email
+    await sendEmail({
+      to: userEmail,
+      subject: "Order Confirmation",
+      html: `
+        <h2>Thanks for your order!</h2>
+        <p>Order ID: ${newOrder._id}</p>
+        <p>Total: $${totalAmount.toFixed(2)}</p>
+        <p>You can ${isDigital ? "download your files soon" : "expect delivery shortly"}.</p>
+        <p>View your order <a href="${process.env.CLIENT_URL}/account/orders/${newOrder._id}">here</a>.</p>
+      `,
+    });
+
+  } catch (error) {
+    console.error("Error processing checkout completion:", error);
+  }
+}
