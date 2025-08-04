@@ -1,7 +1,7 @@
 {
-  "name": "hub-digital-backend",
+  "name": "tyfits-backend",
   "version": "1.0.0",
-  "description": "a dropshipping website",
+  "description": "a gym website",
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc",
@@ -10,7 +10,7 @@
     "lint": "eslint 'src/**/*.ts'"
   },
   "keywords": [
-    "dropshipping"
+    "gym"
   ],
   "author": "Blackbobs",
   "license": "ISC",
