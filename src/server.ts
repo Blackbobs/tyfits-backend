@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import express  from "express";
+import express, { Request, Response, NextFunction } from "express";
 import config from "./config/config";
 import cors from "cors"
 import usersRouter from "./routes/users.routes";
@@ -15,18 +15,20 @@ if (process.env.NODE_ENV === 'production') {
   import('./utils/self-ping')
 }
 
-dotenv.config()
+dotenv.config();
 
 const app = express();
 const PORT = config.PORT || 3000;
 
-// app.post("/stripe/webhook", bodyParser.raw({ type: "application/json" }), stripeWebhook);
 const allowedOrigins = [
   'http://localhost:3000',
   'http://192.168.113.86:3000',
-  'https://hub-digital-admin.vercel.app'
-]
-app.options('*', cors({
+  'https://tyfits-admin.vercel.app',
+  'https://your-second-frontend.vercel.app' // <-- add second frontend if needed
+];
+
+// ✅ Use CORS before routes
+app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) {
@@ -39,19 +41,29 @@ app.options('*', cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 }));
 
-// Body parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-
+// Routers
 app.use('/api/v1/users', usersRouter)
 app.use('/api/v1/products', productsRouter);
 app.use('/api/v1/cart', cartRouter);
 app.use('/api/v1/checkout', checkoutRouter)
 
-app.use('/', (_req, res) =>{
-    res.send("Welcome to hub digital")
-})
+app.use('/', (_req, res) => {
+  res.send("Welcome to TyFits");
+});
+
+// CORS error handler
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  if (err.message === 'Not allowed by CORS') {
+     res.status(403).json({ error: 'CORS policy blocked this request' });
+     return
+  }
+  next(err);
+});
+
+
 
 app.use(errorMiddleware);
 
