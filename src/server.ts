@@ -7,6 +7,7 @@ import connectDB from "./config/db";
 import errorMiddleware from "./middlewares/error.middleware";
 import productsRouter from "./routes/products.routes";
 import cartRouter from "./routes/cart.routes";
+import checkoutRouter from "./routes/checkout.routes";
 // import { stripeWebhook } from "./controllers/checkout.controller";
 // import bodyParser from "body-parser";
 
@@ -18,7 +19,8 @@ const PORT = config.PORT || 3000;
 // app.post("/stripe/webhook", bodyParser.raw({ type: "application/json" }), stripeWebhook);
 
 app.use(cors({
-  origin: 'http://localhost:3000',
+  // origin: 'http://localhost:3000',
+  origin: 'http://192.168.113.86:3000',
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
@@ -31,6 +33,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/v1/users', usersRouter)
 app.use('/api/v1/products', productsRouter);
 app.use('/api/v1/cart', cartRouter);
+app.use('/api/v1/checkout', checkoutRouter)
 
 app.use('/', (_req, res) =>{
     res.send("Welcome to hub digital")

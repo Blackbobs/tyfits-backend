@@ -2,9 +2,17 @@ import { Request, Response } from 'express';
 import User from '../models/user.model';
 import bcrypt from 'bcrypt';
 import config from '../config/config';
-import jwt from 'jsonwebtoken';
+import jwt, { JwtPayload, VerifyErrors } from 'jsonwebtoken';
 import { Role } from '../types/types';
+import { isValidObjectId } from '../utils/valid-object.id';
 
+
+interface CustomJwtPayload extends JwtPayload {
+  id: string;
+  email: string;
+  username: string;
+  role: string;
+}
 
 
 export const getAllCustomers = async (req: Request, res: Response) => {
@@ -146,41 +154,174 @@ export const signIn = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
+
+
+
 export const refreshToken = async (req: Request, res: Response) => {
   try {
-    const { refreshToken } = req.cookies;
-
-    if (!refreshToken) {
-      res.status(401).json({ message: 'Refresh token not provided' });
+    const token = req.cookies.refreshToken;
+    if (!token) {
+       res.status(401).json({ message: 'No refresh token provided' });
+       return
     }
+    console.log(123)
 
     jwt.verify(
-      refreshToken,
+      token,
       config.refreshKey,
-      (err: jwt.VerifyErrors | null, decoded: any) => {
-        if (err) {
-          res.status(403).json({ message: 'Invalid refresh token' });
+      (err: VerifyErrors | null, decoded: string | JwtPayload | undefined) => {
+        if (err || !decoded || typeof decoded === 'string') {
+           res.status(403).json({ message: 'Invalid refresh token' });
+           return
         }
 
-        const newAccessToken = jwt.sign(
-          {
-            id: decoded.id,
-            email: decoded.email,
-            username: decoded.username,
-            role: decoded.role,
-          },
-          config.secretKey,
-          { expiresIn: '15m' },
-        );
+        const { id, email, username, role } = decoded as CustomJwtPayload;
 
-        res.status(200).json({
-          message: 'New access token generated',
-          accessToken: newAccessToken,
+        const accessToken = jwt.sign({ id, email, username, role }, config.secretKey, {
+          expiresIn: '15m',
         });
-      },
+
+        const newRefreshToken = jwt.sign({ id, email, username, role }, config.refreshKey, {
+          expiresIn: '7d',
+        });
+
+        res.cookie('refreshToken', newRefreshToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'strict',
+          maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
+
+         res.status(200).json({
+          message: 'Token refreshed successfully',
+          accessToken,
+        });
+        return
+      }
     );
+  } catch (err) {
+    console.error('Refresh error:', err);
+     res.status(500).json({ message: 'Internal server error' });
+     return
+  }
+};
+
+export const changePassword = async (req: Request, res: Response) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.userInfo?.id;
+
+    // Validate user ID
+    if (!isValidObjectId(userId as string)) {
+       res.status(400).json({ message: 'Invalid user ID' });
+       return
+    }
+
+    // Check if required fields are provided
+    if (!currentPassword || !newPassword) {
+       res.status(400).json({ 
+        message: 'Current password and new password are required' 
+      });
+      return
+    }
+
+    // Find the user
+    const user = await User.findById(userId);
+    if (!user) {
+       res.status(404).json({ message: 'User not found' });
+       return
+    }
+
+    // Verify current password
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isPasswordValid) {
+       res.status(401).json({ message: 'Current password is incorrect' });
+       return
+    }
+
+    // Validate new password
+    if (newPassword.length < 6) {
+       res.status(400).json({ 
+        message: 'Password must be at least 6 characters long' 
+      });
+      return
+    }
+
+    // Hash and update the new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+    await user.save();
+
+    // Return success response
+     res.status(200).json({ 
+      message: 'Password changed successfully' 
+    });
+    return
+
   } catch (error) {
-    console.error('Refresh token error:', error);
-    res.status(500).json({ message: 'Failed to refresh token' });
+    console.error('Error changing password:', error);
+     res.status(500).json({ 
+      message: 'Server error while changing password' 
+    });
+    return
+  }
+};
+
+export const updateProfile = async (req: Request, res: Response) => {
+  try {
+    const userId = req.userInfo?.id;
+    const { username, email, address, phone } = req.body;
+
+    if (!isValidObjectId(userId as string)) {
+       res.status(400).json({ message: 'Invalid user ID' });
+       return
+    }
+
+  
+    if (email) {
+      const existingUser = await User.findOne({ 
+        email, 
+        _id: { $ne: userId } 
+      });
+      
+      if (existingUser) {
+         res.status(409).json({ 
+          message: 'Email already in use by another account' 
+        });
+        return
+      }
+    }
+
+    // Update user profile
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { 
+        username, 
+        email, 
+        address, 
+        phone 
+      },
+      { 
+        new: true,
+        select: '-password -__v' 
+      }
+    );
+
+    if (!updatedUser) {
+       res.status(404).json({ message: 'User not found' });
+       return
+    }
+
+     res.status(200).json({ 
+      message: 'Profile updated successfully',
+      user: updatedUser
+    });
+    return
+  } catch (error) {
+    console.error('Error updating profile:', error);
+     res.status(500).json({ 
+      message: 'Server error while updating profile' 
+    });
+    return
   }
 };

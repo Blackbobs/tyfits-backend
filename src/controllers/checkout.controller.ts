@@ -20,13 +20,14 @@ export const createCheckoutSession = async (req: Request, res: Response) => {
   try {
     const userId = req.userInfo?.id;
     const userEmail = req.userInfo?.email;
+    console.log(userId, userEmail)
     
     if (!userId || !userEmail) {
        res.status(401).json({ message: 'User not authenticated' });
        return
     }
 
-    const cart = await Cart.findOne({ userId })
+    const cart = await Cart.findOne({ user: userId })
       .populate<{ items: { product: IProducts, quantity: number }[] }>("items.product")
       .exec();
 
@@ -58,7 +59,7 @@ export const createCheckoutSession = async (req: Request, res: Response) => {
       mode: "payment",
       line_items: lineItems,
       success_url: `${process.env.CLIENT_URL}/order/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.CLIENT_URL}/cart`,
+      cancel_url: `${process.env.CLIENT_URL}`,
       customer_email: userEmail,
       metadata: {
         userId: userId.toString(),
@@ -77,38 +78,38 @@ export const createCheckoutSession = async (req: Request, res: Response) => {
   }
 };
 
-export const stripeWebhook = async (req: Request, res: Response): Promise<void> => {
-  const sig = req.headers["stripe-signature"] as string;
-  let event: Stripe.Event;
+// export const stripeWebhook = async (req: Request, res: Response): Promise<void> => {
+//   const sig = req.headers["stripe-signature"] as string;
+//   let event: Stripe.Event;
 
-  try {
-    event = stripe.webhooks.constructEvent(
-      req.body,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET!
-    );
-    return
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    console.error("Webhook signature verification failed:", errorMessage);
-    res.status(400).send(`Webhook Error: ${errorMessage}`);
-    return;
-  }
+//   try {
+//     event = stripe.webhooks.constructEvent(
+//       req.body,
+//       sig,
+//       process.env.STRIPE_WEBHOOK_SECRET!
+//     );
+//     return
+//   } catch (err) {
+//     const errorMessage = err instanceof Error ? err.message : String(err);
+//     console.error("Webhook signature verification failed:", errorMessage);
+//     res.status(400).send(`Webhook Error: ${errorMessage}`);
+//     return;
+//   }
 
-  switch (event.type) {
-    case "checkout.session.completed":
-      await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
-      break;
-    case "payment_intent.payment_failed":
-      console.warn("Payment failed:", (event.data.object as Stripe.PaymentIntent).last_payment_error?.message);
-      break;
-    case "checkout.session.expired":
-      console.warn("Checkout session expired:", (event.data.object as Stripe.Checkout.Session).id);
-      break;
-  }
+//   switch (event.type) {
+//     case "checkout.session.completed":
+//       await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
+//       break;
+//     case "payment_intent.payment_failed":
+//       console.warn("Payment failed:", (event.data.object as Stripe.PaymentIntent).last_payment_error?.message);
+//       break;
+//     case "checkout.session.expired":
+//       console.warn("Checkout session expired:", (event.data.object as Stripe.Checkout.Session).id);
+//       break;
+//   }
 
-  res.status(200).json({ received: true });
-};
+//   res.status(200).json({ received: true });
+// };
 
 async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
   try {
@@ -195,3 +196,42 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
     console.error("Error processing checkout completion:", error);
   }
 }
+
+// controllers/checkout.controller.ts
+export const verifyCheckoutSession = async (req: Request, res: Response) => {
+  const { session_id } = req.query;
+
+  try {
+    if (!session_id || typeof session_id !== 'string') {
+       res.status(400).json({ message: "Session ID is required" });
+       return
+    }
+
+    // Fetch session from Stripe
+    const session = await stripe.checkout.sessions.retrieve(session_id);
+
+    // Optional: Ensure it's not already processed by checking DB
+    const alreadyExists = await Order.findOne({
+      "paymentInfo.reference": session.payment_intent,
+    });
+    if (alreadyExists) {
+       res.status(200).json({ message: "Order already processed" });
+       return
+    }
+
+    if (session.payment_status !== "paid") {
+       res.status(400).json({ message: "Payment not completed" });
+       return
+    }
+
+    // Reuse your existing logic
+    await handleCheckoutSessionCompleted(session);
+
+     res.status(200).json({ message: "Order processed successfully" });
+     return
+  } catch (error) {
+    console.error("Error verifying session:", error);
+     res.status(500).json({ message: "Internal server error" });
+     return
+  }
+};
