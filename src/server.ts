@@ -26,7 +26,7 @@ const allowedOrigins = [
   'http://192.168.113.86:3000',
   'https://hub-digital-admin.vercel.app'
 ]
-app.use(cors({
+app.options('*', cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) {
@@ -36,7 +36,9 @@ app.use(cors({
   },
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
 }));
+
 // Body parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
