@@ -11,6 +11,10 @@ import checkoutRouter from "./routes/checkout.routes";
 // import { stripeWebhook } from "./controllers/checkout.controller";
 // import bodyParser from "body-parser";
 
+if (process.env.NODE_ENV === 'production') {
+  import('./utils/self-ping')
+}
+
 dotenv.config()
 
 const app = express();
