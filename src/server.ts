@@ -21,14 +21,22 @@ const app = express();
 const PORT = config.PORT || 3000;
 
 // app.post("/stripe/webhook", bodyParser.raw({ type: "application/json" }), stripeWebhook);
-
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://192.168.113.86:3000',
+  'https://hub-digital-admin.vercel.app'
+]
 app.use(cors({
-  // origin: 'http://localhost:3000',
-  origin: 'http://192.168.113.86:3000',
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
-
 // Body parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
