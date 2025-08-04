@@ -12,7 +12,8 @@ export const getUserOrders = async (req: Request, res: Response) => {
 
     // Validate user ID
     if (!isValidObjectId(userId as string)) {
-      return res.status(400).json({ message: 'Invalid user ID' });
+       res.status(400).json({ message: 'Invalid user ID' });
+       return
     }
 
     // Find orders for the user with proper typing
@@ -37,10 +38,11 @@ export const getUserOrders = async (req: Request, res: Response) => {
       .lean()
 
     if (!orders || orders.length === 0) {
-      return res.status(404).json({ 
+       res.status(404).json({ 
         message: 'No orders found for this user',
         orders: []
       });
+      return
     }
 
     // Format the response with proper typing
@@ -73,16 +75,18 @@ export const getUserOrders = async (req: Request, res: Response) => {
       
     }));
 
-    return res.status(200).json({ 
+     res.status(200).json({ 
       message: 'Orders retrieved successfully',
       orders: formattedOrders
     });
+    return
 
   } catch (error) {
     console.error('Error fetching user orders:', error);
-    return res.status(500).json({ 
+     res.status(500).json({ 
       message: 'Server error while fetching orders' 
     });
+    return
   }
 };
 
@@ -97,17 +101,20 @@ export const getAllOrders = async (_req: Request, res: Response) => {
       .exec();
 
     if (!orders || orders.length === 0) {
-      return res.status(404).json({ message: "No orders found" });
+       res.status(404).json({ message: "No orders found" });
+       return
     }
 
-    return res.status(200).json({ 
+     res.status(200).json({ 
       message: "Orders fetched successfully", 
       orders 
     });
+    return
 
   } catch (error) {
     console.log("Error fetching all orders:", error);
-    return res.status(500).json({ message: "Internal server error" });
+     res.status(500).json({ message: "Internal server error" });
+     return
   }
 };
 
@@ -117,15 +124,18 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     const { status } = req.body;
 
     if (!isValidObjectId(orderId)) {
-      return res.status(400).json({ message: "Invalid order ID" });
+       res.status(400).json({ message: "Invalid order ID" });
+       return
     }
     
     if (!status) {
-      return res.status(400).json({ message: "Order status is required" });
+       res.status(400).json({ message: "Order status is required" });
+       return
     }
 
     if (!Object.values(OrderStatus).includes(status)) {
-      return res.status(400).json({ message: "Invalid order status" });
+       res.status(400).json({ message: "Invalid order status" });
+       return
     }
 
     const order = await Order.findByIdAndUpdate(
@@ -135,17 +145,19 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     ).exec();
 
     if (!order) {
-      return res.status(404).json({ message: "Order not found" });
+       res.status(404).json({ message: "Order not found" });
+       return
     }
 
-    return res.status(200).json({ 
+     res.status(200).json({ 
       message: "Order status updated successfully", 
       order 
     });
-
+    return
   } catch (error) {
     console.log("Error updating order status:", error);
-    return res.status(500).json({ message: "Internal server error" });
+     res.status(500).json({ message: "Internal server error" });
+     return
   }
 };
 
@@ -154,22 +166,25 @@ export const deleteOrder = async (req: Request, res: Response) => {
     const { orderId } = req.params;
 
     if (!isValidObjectId(orderId)) {
-      return res.status(400).json({ message: "Invalid order ID" });
+       res.status(400).json({ message: "Invalid order ID" });
+       return
     }
 
     const order = await Order.findByIdAndDelete(orderId).exec();
 
     if (!order) {
-      return res.status(404).json({ message: "Order not found" });
+       res.status(404).json({ message: "Order not found" });
+       return
     }
 
-    return res.status(200).json({ 
+     res.status(200).json({ 
       message: "Order deleted successfully", 
       order 
     });
-
+    return
   } catch (error) {
     console.log("Error deleting order:", error);
-    return res.status(500).json({ message: "Internal server error" });
+     res.status(500).json({ message: "Internal server error" });
+     return
   }
 };
