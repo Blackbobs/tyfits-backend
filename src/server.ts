@@ -24,7 +24,7 @@ const allowedOrigins = [
   'http://localhost:3000',
   'http://192.168.113.86:3000',
   'https://tyfits-admin.vercel.app',
-  'https://tyfits.vercel.app/'
+  'https://tyfits.vercel.app'
 ];
 
 // ✅ Use CORS before routes
