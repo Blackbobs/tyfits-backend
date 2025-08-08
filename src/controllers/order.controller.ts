@@ -93,7 +93,7 @@ export const getUserOrders = async (req: Request, res: Response) => {
 export const getAllOrders = async (_req: Request, res: Response) => {
   try {
     const orders = await Order.find()
-      .populate('user', 'username email')
+      .populate('users', 'username email')
       .populate<{ items: { product: { _id: Types.ObjectId; title: string; price: number } }[] }>({
         path: 'items.product',
         select: 'title price'
