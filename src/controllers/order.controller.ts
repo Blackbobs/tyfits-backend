@@ -17,7 +17,7 @@ export const getUserOrders = async (req: Request, res: Response) => {
     }
 
     // Find orders for the user with proper typing
-    const orders = await Order.find({ user: userId })
+    const orders = await Order.find({ users: userId })
     .populate<{
       items: {
         product: {
@@ -93,7 +93,7 @@ export const getUserOrders = async (req: Request, res: Response) => {
 export const getAllOrders = async (_req: Request, res: Response) => {
   try {
     const orders = await Order.find()
-      .populate('users', 'username email')
+      .populate('user', 'username email')
       .populate<{ items: { product: { _id: Types.ObjectId; title: string; price: number } }[] }>({
         path: 'items.product',
         select: 'title price'

@@ -5,7 +5,7 @@ import mongoose from "mongoose";
 const OrderSchema = new Schema<IOrder>({
     user: {
         type: Schema.Types.ObjectId,
-        ref: "User",
+        ref: "Users",
         required: true,
     },
     items: [
