@@ -49,7 +49,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/v1/users', usersRouter)
 app.use('/api/v1/products', productsRouter);
 app.use('/api/v1/cart', cartRouter);
-app.use('/api/v1/order', orderRouter)
+app.use('/api/v1/orders', orderRouter)
 app.use('/api/v1/checkout', checkoutRouter)
 
 app.use('/', (_req, res) => {
