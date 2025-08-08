@@ -1,4 +1,3 @@
-// controllers/checkout.controller.ts
 import { Request, Response } from "express";
 import Cart from "../models/cart.model";
 import Order from "../models/order.model";
