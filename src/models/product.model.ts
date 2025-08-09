@@ -1,23 +1,33 @@
 import mongoose, { Schema } from "mongoose";
-import { IProducts, ProductType } from "../types/types";
+import { IProducts, ProductSize, ProductColor, ProductType } from "../types/types";
 
 const ProductSchema = new Schema<IProducts>({
-     title: { type: String, required: true },
-    description: { type: String },
-    price: { type: Number, required: true },
-    images: [
+  title: { type: String, required: true },
+  description: { type: String },
+  price: { type: Number, required: true },
+  images: [
     {
       url: { type: String, required: true },
       publicId: { type: String, required: true },
     },
   ],
-    type: { type: String, enum: Object.values(ProductType), required: true },
-    stock: { type: Number, default: 0 },
-    file: {
+  type: { type: String, enum: Object.values(ProductType), required: true },
+  stock: { type: Number, default: 0 },
+  file: {
     url: { type: String },
     publicId: { type: String },
   },
-    createdBy: { type: Schema.Types.ObjectId, ref: "Users", required: true },
-}, {timestamps: true});
+  sizes: {
+    type: [String],
+    enum: Object.values(ProductSize),
+    default: [],
+  },
+  colors: {
+    type: [String],
+    enum: Object.values(ProductColor),
+    default: [],
+  },
+  createdBy: { type: Schema.Types.ObjectId, ref: "Users", required: true },
+}, { timestamps: true });
 
 export default mongoose.model<IProducts>("Product", ProductSchema);

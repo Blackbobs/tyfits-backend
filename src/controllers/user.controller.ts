@@ -31,6 +31,60 @@ export const getAllCustomers = async (req: Request, res: Response) => {
   }
 };
 
+export const getCustomerDetails = async (req: Request, res: Response) => {
+  try {
+    const {id} = req.params
+
+    if (!isValidObjectId(id)) {
+       res.status(400).json({
+        success: false,
+        message: 'Invalid customer ID format'
+      });
+      return
+    }
+
+    const customer = await User.findOne({
+      _id: id,
+      role: 'customer'
+    })
+    .select('-password -__v')
+    .populate({
+      path: 'orders',
+      select: '_id status totalAmount createdAt',
+      options: { sort: { createdAt: -1 } },
+      populate: {
+        path: 'items.product',
+        select: 'title price images',
+        transform: (doc) => ({
+          _id: doc._id,
+          title: doc.title,
+          price: doc.price,
+          image: doc.images?.[0]?.url || null
+        })
+      }
+    }); 
+
+    if (!customer) {
+       res.status(404).json({
+        success: false,
+        message: 'Customer not found'
+      });
+      return
+    }
+
+    res.status(200).json({
+      message: "Customer details retrieved successfully",
+      customer,
+    })
+  } catch (error) {
+    console.error('Error fetching customers:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error. Please try again.',
+    });
+  }
+}
+
 
 // create a user
 export const signUp = async (req: Request, res: Response): Promise<void> => {

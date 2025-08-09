@@ -132,11 +132,11 @@ export const getOrderById = async (req: Request, res: Response) => {
     const order = await Order.findById(orderId)
       .populate({
         path: "user",
-        select: "username email" // Ensure we get user.name & user.email
+        select: "username email" 
       })
       .populate({
         path: "items.product",
-        select: "title price images" // Include images for UI
+        select: "title price images" 
       })
       .lean();
 

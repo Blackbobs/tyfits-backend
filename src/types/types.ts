@@ -1,97 +1,122 @@
-  import mongoose, { Document, Types } from 'mongoose';
+import mongoose, { Document, Types } from 'mongoose';
 
-  export interface IUser extends Document {
-    username: string;
-    email: string;
-    address: string;
-    password: string;
-    profilePicture?: string;
-    role: Role;
-    createdAt?: Date;
-    updatedAt?: Date;
-  }
+export interface IUser extends Document {
+  username: string;
+  email: string;
+  address: string;
+  password: string;
+  profilePicture?: string;
+  role: Role;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
 
-  export interface IProducts extends Document {
-    _id: Types.ObjectId;
-    title: string;
-    description?: string;
-    price: number;
+export interface IProducts extends Document {
+  _id: Types.ObjectId;
+  title: string;
+  description?: string;
+  price: number;
 
-    images?: {
-      url: string;
-      publicId: string;
-    }[];
+  images?: {
+    url: string;
+    publicId: string;
+  }[];
 
-    file?: {
-      url: string;
-      publicId: string;
-    };
+  file?: {
+    url: string;
+    publicId: string;
+  };
 
-    type: ProductType;
-    stock?: number;
-    createdBy: Types.ObjectId;
-    createdAt?: Date;
-    updatedAt?: Date;
-  }
+  type: ProductType;
+  stock?: number;
+  sizes?: ProductSize[];
+  colors?: ProductColor[];
+  createdBy: Types.ObjectId;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
 
-  export interface IOrder extends Document {
-    _id: Types.ObjectId;
-    user: Types.ObjectId;
-    items: {
-      product: Types.ObjectId;
-      quantity: number;
-      price: number;
-    }[];
-    totalAmount: number;
-    status: OrderStatus;
-    paymentInfo: {
-      method: string;
-      reference: string;
-      status: 'success' | 'failed' | 'cancelled';
-    };
-    isDigital: boolean;
-    shippingAddress?: {
-      name?: string;
-      phone?: string;
-      address: {
-        line1?: string;
-        line2?: string;
-        city?: string;
-        state?: string;
-        postal_code?: string;
-        country?: string;
-      };
-    };
-    createdAt?: Date;
-    updatedAt?: Date;
-  }
-
-  export interface ICartItem {
-    product: IProducts;
+export interface IOrder extends Document {
+  _id: Types.ObjectId;
+  user: Types.ObjectId;
+  items: {
+    product: Types.ObjectId;
     quantity: number;
-  }
+    price: number;
+  }[];
+  totalAmount: number;
+  status: OrderStatus;
+  paymentInfo: {
+    method: string;
+    reference: string;
+    status: 'success' | 'failed' | 'cancelled';
+  };
+  isDigital: boolean;
+  shippingAddress?: {
+    name?: string;
+    phone?: string;
+    address: {
+      line1?: string;
+      line2?: string;
+      city?: string;
+      state?: string;
+      postal_code?: string;
+      country?: string;
+    };
+  };
+  createdAt?: Date;
+  updatedAt?: Date;
+}
 
-  export interface ICart extends Document {
-    _id: Types.ObjectId;
-    user: Types.ObjectId;
-    items: ICartItem[];
-    createdAt?: Date;
-    updatedAt?: Date;
-  }
+export interface ICartItem {
+  product: IProducts;
+  quantity: number;
+}
 
-  export enum OrderStatus {
-    pending = 'pending',
-    processing = 'processing',
-    shipped = 'shipped',
-    delivered = 'delivered',
-    cancelled = 'cancelled',
-  }
-  export enum Role {
-    customer = 'customer',
-    admin = 'admin',
-  }
-    
-  export enum ProductType {
-    physical = 'physical',
-    digital = 'digital',
-  }
+export interface ICart extends Document {
+  _id: Types.ObjectId;
+  user: Types.ObjectId;
+  items: ICartItem[];
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export enum OrderStatus {
+  pending = 'pending',
+  processing = 'processing',
+  shipped = 'shipped',
+  delivered = 'delivered',
+  cancelled = 'cancelled',
+}
+export enum Role {
+  customer = 'customer',
+  admin = 'admin',
+}
+
+export enum ProductType {
+  physical = 'physical',
+  digital = 'digital',
+}
+
+export enum ProductSize {
+  XS = 'XS',
+  S = 'S',
+  M = 'M',
+  L = 'L',
+  XL = 'XL',
+  XXL = 'XXL',
+}
+
+export enum ProductColor {
+  RED = 'Red',
+  BLUE = 'Blue',
+  GREEN = 'Green',
+  BLACK = 'Black',
+  WHITE = 'White',
+  YELLOW = 'Yellow',
+  BROWN = 'Brown',
+  PURPLE = 'Purple',
+  ORANGE = 'Orange',
+  PINK = 'Pink',
+  // add more named colors as needed
+}

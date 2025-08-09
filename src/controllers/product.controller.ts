@@ -1,18 +1,55 @@
 import { Request, Response } from 'express';
-import { ProductType } from '../types/types';
+import { ProductSize, ProductColor, ProductType } from '../types/types';
 import Product from '../models/product.model';
 import { uploadToCloudinary } from '../utils/Uploader';
 import cloudinary from '../config/cloudinary';
 import mongoose from 'mongoose';
+import { parseArrayInput } from '../utils/convert-sizes-colors';
 
-export const createProduct = async (req: Request, res: Response): Promise<void> => {
+export const createProduct = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
   try {
-    const { title, description, price, stock, type } = req.body;
+    const { title, description, price, stock, type, sizes, colors } = req.body;
 
     if (!type || !Object.values(ProductType).includes(type)) {
       res.status(400).json({ message: 'Invalid or missing product type' });
       return;
     }
+
+    const sizesArray = parseArrayInput(sizes) || [];
+    const colorsArray = parseArrayInput(colors) || [];
+
+    const invalidSizes = sizesArray.filter(
+      (s) => !Object.values(ProductSize).includes(s as ProductSize),
+    );
+    if (invalidSizes.length > 0) {
+      res
+        .status(400)
+        .json({
+          success: false,
+          message: `Invalid sizes: ${invalidSizes.join(', ')}`,
+        });
+      return;
+    }
+
+    // Validate colors if provided
+    const invalidColors = colorsArray.filter(
+      (c) => !Object.values(ProductColor).includes(c as ProductColor),
+    );
+    if (invalidColors.length > 0) {
+      res
+        .status(400)
+        .json({
+          success: false,
+          message: `Invalid colors: ${invalidColors.join(', ')}`,
+        });
+      return;
+    }
+
+    const typedSizes = sizesArray as ProductSize[];
+    const typedColors = colorsArray as ProductColor[];
 
     const createdBy = req.userInfo?.id;
     if (!createdBy) {
@@ -21,7 +58,8 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
     }
 
     if (type === ProductType.digital) {
-      const file = (req.files as { [fieldname: string]: Express.Multer.File[] })?.file?.[0];
+      const file = (req.files as { [fieldname: string]: Express.Multer.File[] })
+        ?.file?.[0];
       if (!file) {
         res.status(400).json({ message: 'Digital product file is required' });
         return;
@@ -38,6 +76,8 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
           url: uploadedFile.url,
           publicId: uploadedFile.publicId,
         },
+        sizes: sizesArray,
+        colors: colorsArray,
       });
 
       res.status(201).json({
@@ -47,7 +87,8 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const images = (req.files as { [fieldname: string]: Express.Multer.File[] })?.images;
+    const images = (req.files as { [fieldname: string]: Express.Multer.File[] })
+      ?.images;
     if (!images || !images.length) {
       res.status(400).json({ message: 'Product images are required' });
       return;
@@ -73,22 +114,33 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
     });
   } catch (error) {
     console.log('Error creating product:', error);
-    res.status(500).json({ message: 'Server error. Failed to create product.' });
+    res
+      .status(500)
+      .json({ message: 'Server error. Failed to create product.' });
   }
 };
 
-
-export const getAllProducts = async (req: Request, res: Response): Promise<void> => {
+export const getAllProducts = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
   try {
     const products = await Product.find().sort({ createdAt: -1 });
-    res.status(200).json({ message: 'Products fetched successfully', products });
+    res
+      .status(200)
+      .json({ message: 'Products fetched successfully', products });
   } catch (error) {
     console.log('Error fetching all products:', error);
-    res.status(500).json({ message: 'Server error. Failed to fetch products.' });
+    res
+      .status(500)
+      .json({ message: 'Server error. Failed to fetch products.' });
   }
 };
 
-export const getProductById = async (req: Request, res: Response): Promise<void> => {
+export const getProductById = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
   try {
     const { id } = req.params;
     if (!id || !mongoose.Types.ObjectId.isValid(id)) {
@@ -107,15 +159,53 @@ export const getProductById = async (req: Request, res: Response): Promise<void>
   }
 };
 
-export const updateProduct = async (req: Request, res: Response): Promise<void> => {
+export const updateProduct = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
   try {
     const { id } = req.params;
-    const { title, description, price, stock } = req.body;
+    const { title, description, price, stock, sizes, colors } = req.body;
 
     const product = await Product.findById(id);
     if (!product) {
       res.status(404).json({ message: 'Product not found' });
       return;
+    }
+
+    const sizesArray = parseArrayInput(sizes) as string[] | undefined;
+    const colorsArray = parseArrayInput(colors) as string[] | undefined;
+
+    if (sizesArray) {
+      const invalidSizes = sizesArray.filter(
+        (s) => !Object.values(ProductSize).includes(s as ProductSize),
+      );
+      if (invalidSizes.length > 0) {
+        res
+          .status(400)
+          .json({
+            success: false,
+            message: `Invalid sizes: ${invalidSizes.join(', ')}`,
+          });
+        return;
+      }
+      product.sizes = sizesArray as ProductSize[];
+    }
+
+    if (colorsArray) {
+      const invalidColors = colorsArray.filter(
+        (c) => !Object.values(ProductColor).includes(c as ProductColor),
+      );
+      if (invalidColors.length > 0) {
+        res
+          .status(400)
+          .json({
+            success: false,
+            message: `Invalid colors: ${invalidColors.join(', ')}`,
+          });
+        return;
+      }
+      product.colors = colorsArray as ProductColor[];
     }
 
     if (product.type === ProductType.digital) {
@@ -139,9 +229,14 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
         }
 
         const uploadedImages = await Promise.all(
-          req.files.map((file: Express.Multer.File) => uploadToCloudinary(file.path))
+          req.files.map((file: Express.Multer.File) =>
+            uploadToCloudinary(file.path),
+          ),
         );
-        product.images = uploadedImages.map(({ url, publicId }) => ({ url, publicId }));
+        product.images = uploadedImages.map(({ url, publicId }) => ({
+          url,
+          publicId,
+        }));
       }
       if (stock !== undefined) {
         product.stock = stock;
@@ -157,11 +252,16 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     res.status(200).json({ message: 'Product updated successfully', product });
   } catch (error) {
     console.log('Error updating product:', error);
-    res.status(500).json({ message: 'Server error. Failed to update product.' });
+    res
+      .status(500)
+      .json({ message: 'Server error. Failed to update product.' });
   }
 };
 
-export const deleteProduct = async (req: Request, res: Response): Promise<void> => {
+export const deleteProduct = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
   try {
     const { id } = req.params;
     const product = await Product.findById(id);
@@ -185,5 +285,3 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
     res.status(500).json({ message: 'Failed to delete product' });
   }
 };
-
-
