@@ -101,7 +101,7 @@ export const getAllOrders = async (_req: Request, res: Response) => {
       .exec();
 
     if (!orders || orders.length === 0) {
-       res.status(404).json({ message: "No orders found" });
+      res.status(200).json({ orders: [] });
        return
     }
 
