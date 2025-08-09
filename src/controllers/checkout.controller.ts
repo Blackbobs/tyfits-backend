@@ -51,22 +51,23 @@ export const createCheckoutSession = async (req: Request, res: Response) => {
 
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = cart.items.map(item => {
       if (!item.product) throw new Error("Product not found in cart item");
-
+      
       return {
         price_data: {
           currency: "usd",
           product_data: {
             name: item.product.title,
-            images: item.product.images?.map(img => img.url),
+            images: item.product.images
+              ?.map(img => img.url)
+              .filter(url => url && url.startsWith("https://")),
           },
           unit_amount: Math.round(item.product.price * 100),
         },
         quantity: item.quantity,
       };
     });
-
-    const params: ExtendedSessionCreateParams = {
-      payment_method_types: ["card"],
+    
+    const session = await stripe.checkout.sessions.create({
       mode: "payment",
       line_items: lineItems,
       success_url: `${process.env.CLIENT_URL}/order/success?session_id={CHECKOUT_SESSION_ID}`,
@@ -75,17 +76,18 @@ export const createCheckoutSession = async (req: Request, res: Response) => {
       shipping_address_collection: {
         allowed_countries: ["US", "CA", "GB", "NG"],
       },
-      phone_number_collection: {
-        enabled: true,
-      },
+      phone_number_collection: { enabled: true },
       metadata: {
         userId: userId.toString(),
         userEmail,
         cartId: cart._id.toString(),
       },
-    };
+      payment_method_collection: "if_required", 
+    });
+    
+    
 
-    const session = await stripe.checkout.sessions.create(params);
+    // const session = await stripe.checkout.sessions.create(params);
     res.status(200).json({ url: session.url });
   } catch (error) {
     console.error("Error creating checkout session:", error);
