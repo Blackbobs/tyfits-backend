@@ -4,6 +4,7 @@ import {
   getAllOrders,
   updateOrderStatus,
   deleteOrder,
+  getOrderById,
 } from '../controllers/order.controller';
 import authMiddleware from '../middlewares/auth.middleware';
 import adminMiddleware from '../middlewares/admin.middleware';
@@ -15,6 +16,8 @@ orderRouter.get('/user',authMiddleware,adminMiddleware, getUserOrders);
 
 // Get all orders (admin)
 orderRouter.get('/',authMiddleware,adminMiddleware, getAllOrders);
+
+orderRouter.get("/:orderId",authMiddleware, getOrderById);
 
 // Update order status
 orderRouter.put('/:orderId/status',authMiddleware,adminMiddleware, updateOrderStatus);
