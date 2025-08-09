@@ -12,7 +12,7 @@ import adminMiddleware from '../middlewares/admin.middleware';
 const orderRouter = Router();
 
 // Get all orders for the current user
-orderRouter.get('/user',authMiddleware,adminMiddleware, getUserOrders);
+orderRouter.get('/user',authMiddleware, getUserOrders);
 
 // Get all orders (admin)
 orderRouter.get('/',authMiddleware,adminMiddleware, getAllOrders);
