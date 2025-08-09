@@ -44,6 +44,8 @@ export interface IOrder extends Document {
     product: Types.ObjectId;
     quantity: number;
     price: number;
+    size: string;
+    color: string;
   }[];
   totalAmount: number;
   status: OrderStatus;
@@ -72,6 +74,8 @@ export interface IOrder extends Document {
 export interface ICartItem {
   product: IProducts;
   quantity: number;
+  size?: string; 
+  color?: string;
 }
 
 export interface ICart extends Document {
@@ -131,6 +135,8 @@ export interface PopulatedOrderItem {
   };
   quantity: number;
   price: number;
+  size?: string;
+  color?: string;
 }
 
 export interface PopulatedOrder {

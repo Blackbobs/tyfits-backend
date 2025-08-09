@@ -32,29 +32,46 @@ export const getAllCustomers = async (req: Request, res: Response) => {
   }
 };
 
+import { Request, Response } from 'express';
+import User from '../models/user.model';
+import Order from '../models/order.model';
+import { isValidObjectId } from '../utils/valid-object.id';
+import { Types } from 'mongoose';
+import { IUser, PopulatedOrder } from '../types/types';
+
 export const getCustomerDetails = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
+    // Validate ID format
     if (!isValidObjectId(id)) {
-       res.status(400).json({
+      res.status(400).json({
         success: false,
         message: 'Invalid customer ID format'
       });
-      return
+      return;
     }
 
-    // Use proper typing for the populated result
+    // Fetch customer basic info
     const customer = await User.findOne({
       _id: id,
       role: 'customer'
     })
-    .select('-password -__v')
-    .populate<{ orders: PopulatedOrder[] }>({
-      path: 'orders',
-      select: '_id status totalAmount createdAt items',
-      options: { sort: { createdAt: -1 } },
-      populate: {
+      .select('-password -__v')
+      .lean();
+
+    if (!customer) {
+      res.status(404).json({
+        success: false,
+        message: 'Customer not found'
+      });
+      return;
+    }
+
+    // Fetch orders (works even if orders are not in user.orders array)
+    const orders = await Order.find({ user: id })
+      .select('_id status totalAmount createdAt items')
+      .populate({
         path: 'items.product',
         select: 'title price images',
         transform: (doc: { _id: Types.ObjectId; title: string; price: number; images?: { url: string }[] }) => ({
@@ -63,26 +80,18 @@ export const getCustomerDetails = async (req: Request, res: Response) => {
           price: doc.price,
           image: doc.images?.[0]?.url || null
         })
-      }
-    })
-    .lean();
+      })
+      .sort({ createdAt: -1 })
+      .lean();
 
-    if (!customer) {
-       res.status(404).json({
-        success: false,
-        message: 'Customer not found'
-      });
-      return
-    }
-
-    // Define the response type
+    // Format response
     interface CustomerResponse extends Omit<IUser, 'orders'> {
       orders: Array<PopulatedOrder & { orderNumber: string }>;
     }
 
     const formattedCustomer: CustomerResponse = {
       ...customer,
-      orders: customer.orders?.map((order) => ({
+      orders: orders.map((order) => ({
         ...order,
         orderNumber: `ORD-${order._id.toString().slice(-6).toUpperCase()}`,
         items: order.items.map((item) => ({
@@ -94,25 +103,24 @@ export const getCustomerDetails = async (req: Request, res: Response) => {
             image: null
           }
         }))
-      })) || []
+      }))
     };
 
-     res.status(200).json({
+    res.status(200).json({
       success: true,
-      message: "Customer details retrieved successfully",
+      message: 'Customer details retrieved successfully',
       customer: formattedCustomer
     });
-    return
 
   } catch (error) {
-    console.log(error);
+    console.error(error);
     res.status(500).json({
       success: false,
       message: 'Server error. Please try again.',
     });
-    return;
   }
-}
+};
+
 
 // create a user
 export const signUp = async (req: Request, res: Response): Promise<void> => {

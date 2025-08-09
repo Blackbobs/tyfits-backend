@@ -18,39 +18,6 @@ export const createProduct = async (
       return;
     }
 
-    const sizesArray = parseArrayInput(sizes) || [];
-    const colorsArray = parseArrayInput(colors) || [];
-
-    const invalidSizes = sizesArray.filter(
-      (s) => !Object.values(ProductSize).includes(s as ProductSize),
-    );
-    if (invalidSizes.length > 0) {
-      res
-        .status(400)
-        .json({
-          success: false,
-          message: `Invalid sizes: ${invalidSizes.join(', ')}`,
-        });
-      return;
-    }
-
-    // Validate colors if provided
-    const invalidColors = colorsArray.filter(
-      (c) => !Object.values(ProductColor).includes(c as ProductColor),
-    );
-    if (invalidColors.length > 0) {
-      res
-        .status(400)
-        .json({
-          success: false,
-          message: `Invalid colors: ${invalidColors.join(', ')}`,
-        });
-      return;
-    }
-
-    const typedSizes = sizesArray as ProductSize[];
-    const typedColors = colorsArray as ProductColor[];
-
     const createdBy = req.userInfo?.id;
     if (!createdBy) {
       res.status(401).json({ message: 'Unauthorized: missing user info' });
@@ -76,13 +43,37 @@ export const createProduct = async (
           url: uploadedFile.url,
           publicId: uploadedFile.publicId,
         },
-        sizes: sizesArray,
-        colors: colorsArray,
       });
 
       res.status(201).json({
         message: 'Digital product created successfully',
         product: newDigitalProduct,
+      });
+      return;
+    }
+
+    // For physical products, validate and include sizes and colors
+    const sizesArray = parseArrayInput(sizes) || [];
+    const colorsArray = parseArrayInput(colors) || [];
+
+    const invalidSizes = sizesArray.filter(
+      (s) => !Object.values(ProductSize).includes(s as ProductSize),
+    );
+    if (invalidSizes.length > 0) {
+      res.status(400).json({
+        success: false,
+        message: `Invalid sizes: ${invalidSizes.join(', ')}`,
+      });
+      return;
+    }
+
+    const invalidColors = colorsArray.filter(
+      (c) => !Object.values(ProductColor).includes(c as ProductColor),
+    );
+    if (invalidColors.length > 0) {
+      res.status(400).json({
+        success: false,
+        message: `Invalid colors: ${invalidColors.join(', ')}`,
       });
       return;
     }
@@ -106,6 +97,8 @@ export const createProduct = async (
       stock: stock ?? 0,
       createdBy,
       images: uploadedImages.map(({ url, publicId }) => ({ url, publicId })),
+      sizes: sizesArray,
+      colors: colorsArray,
     });
 
     res.status(201).json({
@@ -114,9 +107,7 @@ export const createProduct = async (
     });
   } catch (error) {
     console.log('Error creating product:', error);
-    res
-      .status(500)
-      .json({ message: 'Server error. Failed to create product.' });
+    res.status(500).json({ message: 'Server error. Failed to create product.' });
   }
 };
 

@@ -7,13 +7,13 @@ import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
-interface ExtendedSessionCreateParams extends Stripe.Checkout.SessionCreateParams {
-  metadata: {
-    userId: string;
-    userEmail: string;
-    cartId: string;
-  };
-}
+// interface ExtendedSessionCreateParams extends Stripe.Checkout.SessionCreateParams {
+//   metadata: {
+//     userId: string;
+//     userEmail: string;
+//     cartId: string;
+//   };
+// }
 
 interface ExtendedCheckoutSession extends Stripe.Checkout.Session {
   shipping_details?: {
@@ -41,7 +41,7 @@ export const createCheckoutSession = async (req: Request, res: Response) => {
     }
 
     const cart = await Cart.findOne({ user: userId })
-      .populate<{ items: { product: IProducts; quantity: number }[] }>("items.product")
+      .populate<{ items: { product: IProducts; quantity: number; size?: string; color?: string }[] }>("items.product")
       .exec();
 
     if (!cart || cart.items.length === 0) {
@@ -56,7 +56,7 @@ export const createCheckoutSession = async (req: Request, res: Response) => {
         price_data: {
           currency: "usd",
           product_data: {
-            name: item.product.title,
+            name: `${item.product.title}${item.size ? ` (Size: ${item.size})` : ''}${item.color ? ` - Color: ${item.color}` : ''}`,
             images: item.product.images
               ?.map(img => img.url)
               .filter(url => url && url.startsWith("https://")),
@@ -83,10 +83,7 @@ export const createCheckoutSession = async (req: Request, res: Response) => {
         cartId: cart._id.toString(),
       },
     });
-    
-    
 
-    // const session = await stripe.checkout.sessions.create(params);
     res.status(200).json({ url: session.url });
   } catch (error) {
     console.error("Error creating checkout session:", error);
@@ -102,7 +99,10 @@ async function handleCheckoutSessionCompleted(session: ExtendedCheckoutSession) 
     const method = session.payment_method_types?.[0] || "card";
     const reference = session.payment_intent as string;
 
-    const cart = await Cart.findById(cartId).populate("items.product").exec();
+    const cart = await Cart.findById(cartId)
+      .populate<{ items: { product: IProducts; quantity: number; size?: string; color?: string }[] }>("items.product")
+      .exec();
+
     if (!cart || cart.items.length === 0) {
       console.warn("No cart found or empty cart for user:", userId);
       return;
@@ -114,6 +114,8 @@ async function handleCheckoutSessionCompleted(session: ExtendedCheckoutSession) 
         product: (item.product as IProducts)._id,
         quantity: item.quantity,
         price: (item.product as IProducts).price,
+        size: item.size,    // Include size
+        color: item.color  // Include color
       };
     });
 
@@ -169,13 +171,43 @@ async function handleCheckoutSessionCompleted(session: ExtendedCheckoutSession) 
     cart.items = [];
     await cart.save();
 
+    // Enhanced email with size/color information
+    const itemsHtml = cart.items.map(item => `
+      <tr>
+        <td>${item.product.title}</td>
+        <td>${item.quantity}</td>
+        <td>$${(item.product.price * item.quantity).toFixed(2)}</td>
+        <td>${item.size || 'N/A'}</td>
+        <td>${item.color || 'N/A'}</td>
+      </tr>
+    `).join('');
+
     await sendEmail({
       to: userEmail,
       subject: "Order Confirmation",
       html: `
         <h2>Thanks for your order!</h2>
         <p>Order ID: ${newOrder._id}</p>
-        <p>Total: $${totalAmount.toFixed(2)}</p>
+        <table border="1" cellpadding="5" cellspacing="0">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Quantity</th>
+              <th>Price</th>
+              <th>Size</th>
+              <th>Color</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="2"><strong>Total</strong></td>
+              <td colspan="3"><strong>$${totalAmount.toFixed(2)}</strong></td>
+            </tr>
+          </tfoot>
+        </table>
         <p>You can ${isDigital ? "download your files soon" : "expect delivery shortly"}.</p>
         <p>View your order <a href="${process.env.CLIENT_URL}/account/orders/${newOrder._id}">here</a>.</p>
       `,

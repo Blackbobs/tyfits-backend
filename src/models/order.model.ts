@@ -1,5 +1,5 @@
 import { Schema } from "mongoose";
-import { IOrder, OrderStatus } from "../types/types";
+import { IOrder, OrderStatus, ProductColor, ProductSize } from "../types/types";
 import mongoose from "mongoose";
 
 const OrderSchema = new Schema<IOrder>({
@@ -22,6 +22,14 @@ const OrderSchema = new Schema<IOrder>({
       price: {
         type: Number,
         required: true,
+      },
+      size: {  
+        type: String,
+        enum: Object.values(ProductSize),
+      },
+      color: {  
+        type: String,
+        enum: Object.values(ProductColor),
       },
     },
   ],
