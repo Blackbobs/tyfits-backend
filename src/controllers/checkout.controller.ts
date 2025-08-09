@@ -15,31 +15,43 @@ interface ExtendedSessionCreateParams extends Stripe.Checkout.SessionCreateParam
   };
 }
 
+interface ExtendedCheckoutSession extends Stripe.Checkout.Session {
+  shipping_details?: {
+    name?: string | null;
+    phone?: string | null;
+    address?: {
+      line1?: string | null;
+      line2?: string | null;
+      city?: string | null;
+      state?: string | null;
+      postal_code?: string | null;
+      country?: string | null;
+    } | null;
+  };
+}
+
 export const createCheckoutSession = async (req: Request, res: Response) => {
   try {
     const userId = req.userInfo?.id;
     const userEmail = req.userInfo?.email;
-    console.log(userId, userEmail)
     
     if (!userId || !userEmail) {
-       res.status(401).json({ message: 'User not authenticated' });
-       return
+      res.status(401).json({ message: "User not authenticated" });
+      return;
     }
 
     const cart = await Cart.findOne({ user: userId })
-      .populate<{ items: { product: IProducts, quantity: number }[] }>("items.product")
+      .populate<{ items: { product: IProducts; quantity: number }[] }>("items.product")
       .exec();
 
     if (!cart || cart.items.length === 0) {
-       res.status(400).json({ message: 'Cart is empty' });
-       return
+      res.status(400).json({ message: "Cart is empty" });
+      return;
     }
 
-    const lineItems = cart.items.map((item) => {
-      if (!item.product) {
-        throw new Error('Product not found in cart item');
-      }
-      
+    const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = cart.items.map(item => {
+      if (!item.product) throw new Error("Product not found in cart item");
+
       return {
         price_data: {
           currency: "usd",
@@ -60,80 +72,43 @@ export const createCheckoutSession = async (req: Request, res: Response) => {
       success_url: `${process.env.CLIENT_URL}/order/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.CLIENT_URL}`,
       customer_email: userEmail,
+      shipping_address_collection: {
+        allowed_countries: ["US", "CA", "GB", "NG"],
+      },
+      phone_number_collection: {
+        enabled: true,
+      },
       metadata: {
         userId: userId.toString(),
         userEmail,
-        cartId: cart._id.toString()
+        cartId: cart._id.toString(),
       },
     };
 
     const session = await stripe.checkout.sessions.create(params);
     res.status(200).json({ url: session.url });
-    return
   } catch (error) {
-    console.error('Error creating checkout session:', error);
-    res.status(500).json({ message: 'Internal server error' });
-    return
+    console.error("Error creating checkout session:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
-// export const stripeWebhook = async (req: Request, res: Response): Promise<void> => {
-//   const sig = req.headers["stripe-signature"] as string;
-//   let event: Stripe.Event;
-
-//   try {
-//     event = stripe.webhooks.constructEvent(
-//       req.body,
-//       sig,
-//       process.env.STRIPE_WEBHOOK_SECRET!
-//     );
-//     return
-//   } catch (err) {
-//     const errorMessage = err instanceof Error ? err.message : String(err);
-//     console.error("Webhook signature verification failed:", errorMessage);
-//     res.status(400).send(`Webhook Error: ${errorMessage}`);
-//     return;
-//   }
-
-//   switch (event.type) {
-//     case "checkout.session.completed":
-//       await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
-//       break;
-//     case "payment_intent.payment_failed":
-//       console.warn("Payment failed:", (event.data.object as Stripe.PaymentIntent).last_payment_error?.message);
-//       break;
-//     case "checkout.session.expired":
-//       console.warn("Checkout session expired:", (event.data.object as Stripe.Checkout.Session).id);
-//       break;
-//   }
-
-//   res.status(200).json({ received: true });
-// };
-
-async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
+async function handleCheckoutSessionCompleted(session: ExtendedCheckoutSession) {
   try {
-    if (!session.metadata) {
-      throw new Error('No metadata found in session');
-    }
+    if (!session.metadata) throw new Error("No metadata found in session");
 
     const { userId, userEmail, cartId } = session.metadata;
     const method = session.payment_method_types?.[0] || "card";
     const reference = session.payment_intent as string;
 
-    const cart = await Cart.findById(cartId)
-      .populate("items.product")
-      .exec();
-
+    const cart = await Cart.findById(cartId).populate("items.product").exec();
     if (!cart || cart.items.length === 0) {
       console.warn("No cart found or empty cart for user:", userId);
       return;
     }
 
     const orderItems = cart.items.map(item => {
-      if (!item.product) {
-        throw new Error('Product not found in cart item');
-      }
-      
+      if (!item.product) throw new Error("Product not found in cart item");
       return {
         product: (item.product as IProducts)._id,
         quantity: item.quantity,
@@ -151,7 +126,21 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
       return (item.product as IProducts).type === "digital";
     });
 
-    // Create order
+    const shippingDetails = session.shipping_details
+      ? {
+          name: session.shipping_details.name || "",
+          phone: session.shipping_details.phone || "",
+          address: {
+            line1: session.shipping_details.address?.line1 || "",
+            line2: session.shipping_details.address?.line2 || "",
+            city: session.shipping_details.address?.city || "",
+            state: session.shipping_details.address?.state || "",
+            postal_code: session.shipping_details.address?.postal_code || "",
+            country: session.shipping_details.address?.country || "",
+          },
+        }
+      : null;
+
     const newOrder = await Order.create({
       user: userId,
       items: orderItems,
@@ -163,22 +152,22 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
         reference,
         status: "success",
       },
+      shippingAddress: shippingDetails,
     });
 
-    // Update product stocks
-    await Promise.all(cart.items.map(async (item) => {
-      const product = item.product as IProducts;
-      if (product.type === "physical" && product.stock !== undefined) {
-        product.stock -= item.quantity;
-        await product.save();
-      }
-    }));
+    await Promise.all(
+      cart.items.map(async item => {
+        const product = item.product as IProducts;
+        if (product.type === "physical" && product.stock !== undefined) {
+          product.stock -= item.quantity;
+          await product.save();
+        }
+      })
+    );
 
-    // Clear cart
     cart.items = [];
     await cart.save();
 
-    // Send confirmation email
     await sendEmail({
       to: userEmail,
       subject: "Order Confirmation",
@@ -190,47 +179,41 @@ async function handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) 
         <p>View your order <a href="${process.env.CLIENT_URL}/account/orders/${newOrder._id}">here</a>.</p>
       `,
     });
-
   } catch (error) {
     console.error("Error processing checkout completion:", error);
   }
 }
 
-// controllers/checkout.controller.ts
 export const verifyCheckoutSession = async (req: Request, res: Response) => {
   const { session_id } = req.query;
 
   try {
-    if (!session_id || typeof session_id !== 'string') {
-       res.status(400).json({ message: "Session ID is required" });
-       return
+    if (!session_id || typeof session_id !== "string") {
+      res.status(400).json({ message: "Session ID is required" });
+      return;
     }
 
-    // Fetch session from Stripe
-    const session = await stripe.checkout.sessions.retrieve(session_id);
+    const session = (await stripe.checkout.sessions.retrieve(session_id, {
+      expand: ["shipping_details"],
+    })) as ExtendedCheckoutSession;
 
-    // Optional: Ensure it's not already processed by checking DB
     const alreadyExists = await Order.findOne({
       "paymentInfo.reference": session.payment_intent,
     });
     if (alreadyExists) {
-       res.status(200).json({ message: "Order already processed" });
-       return
+      res.status(200).json({ message: "Order already processed" });
+      return;
     }
 
     if (session.payment_status !== "paid") {
-       res.status(400).json({ message: "Payment not completed" });
-       return
+      res.status(400).json({ message: "Payment not completed" });
+      return;
     }
 
-    // Reuse your existing logic
     await handleCheckoutSessionCompleted(session);
-
-     res.status(200).json({ message: "Order processed successfully" });
-     return
+    res.status(200).json({ message: "Order processed successfully" });
   } catch (error) {
     console.error("Error verifying session:", error);
-     res.status(500).json({ message: "Internal server error" });
-     return
+    res.status(500).json({ message: "Internal server error" });
   }
 };

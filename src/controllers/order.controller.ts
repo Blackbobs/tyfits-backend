@@ -124,71 +124,56 @@ export const getOrderById = async (req: Request, res: Response) => {
 
     // Validate ID
     if (!isValidObjectId(orderId)) {
-      res.status(400).json({ message: "Invalid order ID" });
-      return;
+       res.status(400).json({ message: "Invalid order ID" });
+       return
     }
 
-    // Find order and populate product details
+    // Find order and populate required details
     const order = await Order.findById(orderId)
-      .populate<{
-        items: {
-          product: {
-            _id: Types.ObjectId;
-            title: string;
-            price: number;
-            images?: { url: string }[];
-          };
-          quantity: number;
-          price: number;
-        }[];
-      }>({
+      .populate({
+        path: "user",
+        select: "username email" // Ensure we get user.name & user.email
+      })
+      .populate({
         path: "items.product",
-        select: "title price images"
+        select: "title price images" // Include images for UI
       })
       .lean();
 
     if (!order) {
-      res.status(404).json({ message: "Order not found" });
-      return;
+       res.status(404).json({ message: "Order not found" });
+       return
     }
 
-    // Format order details
-    const formattedOrder = {
-      _id: order._id,
-      orderNumber: `ORD-${order._id.toString().slice(-6).toUpperCase()}`,
-      createdAt: order.createdAt,
-      status: order.status,
-      totalAmount: order.totalAmount,
-      itemCount: order.items.reduce((sum, item) => sum + item.quantity, 0),
-      items: order.items.map(item => {
-        const product = item.product as {
-          _id: Types.ObjectId;
-          title: string;
-          price: number;
-          images?: any[];
-        };
-        return {
+    // Return exactly what frontend expects
+    res.status(200).json({
+      message: "Order retrieved successfully",
+      order: {
+        _id: order._id,
+        createdAt: order.createdAt,
+        status: order.status,
+        totalAmount: order.totalAmount,
+        user: order.user, 
+        items: order.items.map((item: any) => ({
           product: {
-            _id: product._id,
-            title: product.title,
-            price: product.price,
-            image: product.images?.[0]?.url || null
+            _id: item.product._id,
+            title: item.product.title,
+            price: item.product.price,
+            images: item.product.images || [], 
+            image: item.product.images?.[0]?.url || null
           },
           quantity: item.quantity,
           price: item.price
-        };
-      })
-    };
-
-    res.status(200).json({
-      message: "Order retrieved successfully",
-      order: formattedOrder
+        }))
+      }
     });
   } catch (error) {
     console.error("Error fetching order by ID:", error);
     res.status(500).json({ message: "Server error while fetching order" });
+    return
   }
 };
+
 
 
 export const updateOrderStatus = async (req: Request, res: Response) => {
