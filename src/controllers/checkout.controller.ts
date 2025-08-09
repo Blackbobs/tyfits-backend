@@ -82,7 +82,6 @@ export const createCheckoutSession = async (req: Request, res: Response) => {
         userEmail,
         cartId: cart._id.toString(),
       },
-      payment_method_collection: "if_required", 
     });
     
     
