@@ -3,9 +3,11 @@ import User from '../models/user.model';
 import bcrypt from 'bcrypt';
 import config from '../config/config';
 import jwt, { JwtPayload, VerifyErrors } from 'jsonwebtoken';
-import { IUser, PopulatedOrder, Role } from '../types/types';
+import { IUser, OrderStatus, PopulatedOrder, Role } from '../types/types';
 import { isValidObjectId } from '../utils/valid-object.id';
 import { Types } from 'mongoose';
+import Order from '../models/order.model';
+
 
 
 interface CustomJwtPayload extends JwtPayload {
@@ -32,18 +34,12 @@ export const getAllCustomers = async (req: Request, res: Response) => {
   }
 };
 
-import { Request, Response } from 'express';
-import User from '../models/user.model';
-import Order from '../models/order.model';
-import { isValidObjectId } from '../utils/valid-object.id';
-import { Types } from 'mongoose';
-import { IUser, PopulatedOrder } from '../types/types';
 
+// Update the getCustomerDetails function to handle the type mismatch
 export const getCustomerDetails = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    // Validate ID format
     if (!isValidObjectId(id)) {
       res.status(400).json({
         success: false,
@@ -52,7 +48,6 @@ export const getCustomerDetails = async (req: Request, res: Response) => {
       return;
     }
 
-    // Fetch customer basic info
     const customer = await User.findOne({
       _id: id,
       role: 'customer'
@@ -68,40 +63,37 @@ export const getCustomerDetails = async (req: Request, res: Response) => {
       return;
     }
 
-    // Fetch orders (works even if orders are not in user.orders array)
+   
     const orders = await Order.find({ user: id })
       .select('_id status totalAmount createdAt items')
       .populate({
         path: 'items.product',
         select: 'title price images',
-        transform: (doc: { _id: Types.ObjectId; title: string; price: number; images?: { url: string }[] }) => ({
-          _id: doc._id,
-          title: doc.title,
-          price: doc.price,
-          image: doc.images?.[0]?.url || null
-        })
       })
       .sort({ createdAt: -1 })
-      .lean();
+      .lean() as unknown as PopulatedOrder[]; // Type assertion here
 
-    // Format response
-    interface CustomerResponse extends Omit<IUser, 'orders'> {
-      orders: Array<PopulatedOrder & { orderNumber: string }>;
-    }
-
-    const formattedCustomer: CustomerResponse = {
+    // Format the response
+    const formattedCustomer = {
       ...customer,
       orders: orders.map((order) => ({
         ...order,
         orderNumber: `ORD-${order._id.toString().slice(-6).toUpperCase()}`,
         items: order.items.map((item) => ({
           ...item,
-          product: item.product || {
-            _id: new Types.ObjectId(),
-            title: 'Product not available',
-            price: 0,
-            image: null
-          }
+          product: typeof item.product === 'object' && !(item.product instanceof Types.ObjectId) 
+            ? {
+                _id: item.product._id,
+                title: item.product.title,
+                price: item.product.price,
+                image: item.product.images?.[0]?.url || null
+              }
+            : {
+                _id: new Types.ObjectId(),
+                title: 'Product not available',
+                price: 0,
+                image: null
+              }
         }))
       }))
     };
@@ -120,7 +112,6 @@ export const getCustomerDetails = async (req: Request, res: Response) => {
     });
   }
 };
-
 
 // create a user
 export const signUp = async (req: Request, res: Response): Promise<void> => {

@@ -3,7 +3,12 @@ import { Request, Response } from "express";
 import Order from "../models/order.model";
 import { OrderStatus, PopulatedOrderItem } from "../types/types";
 import { isValidObjectId } from "../utils/valid-object.id";
+import { Types } from "mongoose";
 
+// Helper type guard to check if product is populated
+function isProductPopulated(product: Types.ObjectId | { _id: Types.ObjectId; title: string; price: number; images?: { url: string }[] }): product is { _id: Types.ObjectId; title: string; price: number; images?: { url: string }[] } {
+  return (product as { title: string }).title !== undefined;
+}
 
 export const getUserOrders = async (req: Request, res: Response) => {
   try {
@@ -37,18 +42,35 @@ export const getUserOrders = async (req: Request, res: Response) => {
       status: order.status,
       totalAmount: order.totalAmount,
       itemCount: order.items.reduce((sum, item) => sum + item.quantity, 0),
-      items: order.items.map(item => ({
-        product: {
-          _id: item.product._id,
-          title: item.product.title,
-          price: item.product.price,
-          image: item.product.images?.[0]?.url || null,
-        },
-        quantity: item.quantity,
-        price: item.price,
-        size: item.size,
-        color: item.color
-      }))
+      items: order.items.map(item => {
+        if (!isProductPopulated(item.product)) {
+          return {
+            product: {
+              _id: new Types.ObjectId(),
+              title: 'Product not available',
+              price: 0,
+              image: null,
+            },
+            quantity: item.quantity,
+            price: item.price,
+            size: item.size,
+            color: item.color
+          };
+        }
+
+        return {
+          product: {
+            _id: item.product._id,
+            title: item.product.title,
+            price: item.product.price,
+            image: item.product.images?.[0]?.url || null,
+          },
+          quantity: item.quantity,
+          price: item.price,
+          size: item.size,
+          color: item.color
+        };
+      })
     }));
 
     res.status(200).json({ 
@@ -75,17 +97,33 @@ export const getAllOrders = async (_req: Request, res: Response) => {
 
     const formattedOrders = orders.map(order => ({
       ...order.toObject(),
-      items: order.items.map(item => ({
-        product: {
-          _id: item.product._id,
-          title: item.product.title,
-          price: item.product.price
-        },
-        quantity: item.quantity,
-        price: item.price,
-        size: item.size,
-        color: item.color
-      }))
+      items: order.items.map(item => {
+        if (!isProductPopulated(item.product)) {
+          return {
+            product: {
+              _id: new Types.ObjectId(),
+              title: 'Product not available',
+              price: 0,
+            },
+            quantity: item.quantity,
+            price: item.price,
+            size: item.size,
+            color: item.color
+          };
+        }
+
+        return {
+          product: {
+            _id: item.product._id,
+            title: item.product.title,
+            price: item.product.price
+          },
+          quantity: item.quantity,
+          price: item.price,
+          size: item.size,
+          color: item.color
+        };
+      })
     }));
 
     res.status(200).json({ 
@@ -131,19 +169,37 @@ export const getOrderById = async (req: Request, res: Response) => {
         status: order.status,
         totalAmount: order.totalAmount,
         user: order.user, 
-        items: order.items.map(item => ({
-          product: {
-            _id: item.product._id,
-            title: item.product.title,
-            price: item.product.price,
-            images: item.product.images || [], 
-            image: item.product.images?.[0]?.url || null
-          },
-          quantity: item.quantity,
-          price: item.price,
-          size: item.size,
-          color: item.color
-        }))
+        items: order.items.map(item => {
+          if (!isProductPopulated(item.product)) {
+            return {
+              product: {
+                _id: new Types.ObjectId(),
+                title: 'Product not available',
+                price: 0,
+                images: [],
+                image: null
+              },
+              quantity: item.quantity,
+              price: item.price,
+              size: item.size,
+              color: item.color
+            };
+          }
+
+          return {
+            product: {
+              _id: item.product._id,
+              title: item.product.title,
+              price: item.product.price,
+              images: item.product.images || [],
+              image: item.product.images?.[0]?.url || null
+            },
+            quantity: item.quantity,
+            price: item.price,
+            size: item.size,
+            color: item.color
+          };
+        })
       }
     });
   } catch (error) {
@@ -152,8 +208,7 @@ export const getOrderById = async (req: Request, res: Response) => {
   }
 };
 
-// The updateOrderStatus and deleteOrder functions remain exactly the same
-// as they don't need to handle size/color information
+// The updateOrderStatus and deleteOrder functions remain unchanged
 export const updateOrderStatus = async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params;

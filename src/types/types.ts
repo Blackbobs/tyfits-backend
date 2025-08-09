@@ -126,13 +126,14 @@ export enum ProductColor {
   // add more named colors as needed
 }
 
-export interface PopulatedOrderItem {
+ 
+ export interface PopulatedOrderItem {
   product: {
     _id: Types.ObjectId;
     title: string;
     price: number;
     images?: { url: string }[];
-  };
+  } | Types.ObjectId; 
   quantity: number;
   price: number;
   size?: string;
@@ -146,3 +147,5 @@ export interface PopulatedOrder {
   createdAt: Date;
   items: PopulatedOrderItem[];
 }
+
+
