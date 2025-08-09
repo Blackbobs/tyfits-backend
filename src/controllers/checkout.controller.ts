@@ -194,9 +194,7 @@ export const verifyCheckoutSession = async (req: Request, res: Response) => {
       return;
     }
 
-    const session = await stripe.checkout.sessions.retrieve(session_id, {
-      expand: ["payment_intent", "customer"],
-    });
+    const session = await stripe.checkout.sessions.retrieve(session_id);
     
 
     const alreadyExists = await Order.findOne({
