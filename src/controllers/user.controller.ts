@@ -3,8 +3,9 @@ import User from '../models/user.model';
 import bcrypt from 'bcrypt';
 import config from '../config/config';
 import jwt, { JwtPayload, VerifyErrors } from 'jsonwebtoken';
-import { Role } from '../types/types';
+import { IUser, PopulatedOrder, Role } from '../types/types';
 import { isValidObjectId } from '../utils/valid-object.id';
+import { Types } from 'mongoose';
 
 
 interface CustomJwtPayload extends JwtPayload {
@@ -33,7 +34,7 @@ export const getAllCustomers = async (req: Request, res: Response) => {
 
 export const getCustomerDetails = async (req: Request, res: Response) => {
   try {
-    const {id} = req.params
+    const { id } = req.params;
 
     if (!isValidObjectId(id)) {
        res.status(400).json({
@@ -43,26 +44,28 @@ export const getCustomerDetails = async (req: Request, res: Response) => {
       return
     }
 
+    // Use proper typing for the populated result
     const customer = await User.findOne({
       _id: id,
       role: 'customer'
     })
     .select('-password -__v')
-    .populate({
+    .populate<{ orders: PopulatedOrder[] }>({
       path: 'orders',
-      select: '_id status totalAmount createdAt',
+      select: '_id status totalAmount createdAt items',
       options: { sort: { createdAt: -1 } },
       populate: {
         path: 'items.product',
         select: 'title price images',
-        transform: (doc) => ({
+        transform: (doc: { _id: Types.ObjectId; title: string; price: number; images?: { url: string }[] }) => ({
           _id: doc._id,
           title: doc.title,
           price: doc.price,
           image: doc.images?.[0]?.url || null
         })
       }
-    }); 
+    })
+    .lean();
 
     if (!customer) {
        res.status(404).json({
@@ -72,19 +75,44 @@ export const getCustomerDetails = async (req: Request, res: Response) => {
       return
     }
 
-    res.status(200).json({
+    // Define the response type
+    interface CustomerResponse extends Omit<IUser, 'orders'> {
+      orders: Array<PopulatedOrder & { orderNumber: string }>;
+    }
+
+    const formattedCustomer: CustomerResponse = {
+      ...customer,
+      orders: customer.orders?.map((order) => ({
+        ...order,
+        orderNumber: `ORD-${order._id.toString().slice(-6).toUpperCase()}`,
+        items: order.items.map((item) => ({
+          ...item,
+          product: item.product || {
+            _id: new Types.ObjectId(),
+            title: 'Product not available',
+            price: 0,
+            image: null
+          }
+        }))
+      })) || []
+    };
+
+     res.status(200).json({
+      success: true,
       message: "Customer details retrieved successfully",
-      customer,
-    })
+      customer: formattedCustomer
+    });
+    return
+
   } catch (error) {
-    console.error('Error fetching customers:', error);
+    console.log(error);
     res.status(500).json({
       success: false,
       message: 'Server error. Please try again.',
     });
+    return;
   }
 }
-
 
 // create a user
 export const signUp = async (req: Request, res: Response): Promise<void> => {

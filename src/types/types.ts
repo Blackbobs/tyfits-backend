@@ -7,6 +7,7 @@ export interface IUser extends Document {
   password: string;
   profilePicture?: string;
   role: Role;
+  orders?: Types.ObjectId[] | PopulatedOrder[];
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -119,4 +120,23 @@ export enum ProductColor {
   ORANGE = 'Orange',
   PINK = 'Pink',
   // add more named colors as needed
+}
+
+export interface PopulatedOrderItem {
+  product: {
+    _id: Types.ObjectId;
+    title: string;
+    price: number;
+    images?: { url: string }[];
+  };
+  quantity: number;
+  price: number;
+}
+
+export interface PopulatedOrder {
+  _id: Types.ObjectId;
+  status: OrderStatus;
+  totalAmount: number;
+  createdAt: Date;
+  items: PopulatedOrderItem[];
 }

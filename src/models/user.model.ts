@@ -14,6 +14,10 @@ const UserSchema = new Schema(
         'https://i.pinimg.com/originals/cf/7b/65/cf7b6579b699862233526da318a4d3fa.jpg',
     },
     role: { type: String, enum: ['customer', 'admin'], default: 'customer' },
+    orders: [{
+      type: Schema.Types.ObjectId,
+      ref: 'Order' 
+    }]
   },
   { timestamps: true },
 );
