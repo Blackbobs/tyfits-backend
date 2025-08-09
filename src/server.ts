@@ -24,8 +24,8 @@ const PORT = config.PORT || 3000;
 const allowedOrigins = [
   'http://localhost:3000',
   'http://192.168.113.86:3000',
-  'https://tyhub.vercel.app/',
-  'https://tyhub-admin.vercel.app/',
+  'https://tyhub.vercel.app',
+  'https://tyhub-admin.vercel.app',
 ];
 
 // ✅ Use CORS before routes
