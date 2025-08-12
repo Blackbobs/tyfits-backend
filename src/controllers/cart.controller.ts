@@ -114,6 +114,61 @@ export const getCart = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
+
+export const updateCart = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.userInfo?.id;
+    const { productId } = req.params;
+    const { quantity, size, color } = req.body;
+
+    if (!quantity || quantity <= 0) {
+      res.status(400).json({
+        message: 'Valid positive quantity is required',
+      });
+      return;
+    }
+
+    const cart = await Cart.findOne({ user: userId });
+    if (!cart) {
+      res.status(404).json({ message: 'Cart not found' });
+      return;
+    }
+
+    // Find the item to update
+    const itemIndex = cart.items.findIndex(item => 
+      item.product.toString() === productId &&
+      item.size === size && 
+      item.color === color
+    );
+
+    if (itemIndex === -1) {
+      res.status(404).json({ message: 'Item not found in cart' });
+      return;
+    }
+
+    // Update the quantity
+    cart.items[itemIndex].quantity = quantity;
+    await cart.save();
+
+    const updatedCart = await Cart.findOne({ user: userId })
+      .populate({
+        path: 'items.product',
+        select: 'title price images',
+        model: 'Product',
+      })
+      .lean()
+      .exec();
+
+    res.status(200).json({ 
+      message: 'Cart item updated', 
+      cart: updatedCart 
+    });
+  } catch (error) {
+    console.error('Error updating cart item:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 export const removeCart = async (
   req: Request,
   res: Response,
