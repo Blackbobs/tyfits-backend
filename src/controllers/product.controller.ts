@@ -5,6 +5,8 @@ import { uploadToCloudinary } from '../utils/Uploader';
 import cloudinary from '../config/cloudinary';
 import mongoose from 'mongoose';
 import { parseArrayInput } from '../utils/convert-sizes-colors';
+import redisCache from '../config/redis.config';
+import { generateCacheKey, invalidateProductCaches } from '../utils/redis-cache';
 
 export const createProduct = async (
   req: Request,
@@ -101,13 +103,17 @@ export const createProduct = async (
       colors: colorsArray,
     });
 
+    await invalidateProductCaches();
+
     res.status(201).json({
       message: 'Product created successfully',
       product: newProduct,
     });
   } catch (error) {
     console.log('Error creating product:', error);
-    res.status(500).json({ message: 'Server error. Failed to create product.' });
+    res
+      .status(500)
+      .json({ message: 'Server error. Failed to create product.' });
   }
 };
 
@@ -115,11 +121,28 @@ export const getAllProducts = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
+  const cacheKey = generateCacheKey.productList(req.query);
   try {
-    const products = await Product.find().sort({ createdAt: -1 });
-    res
-      .status(200)
-      .json({ message: 'Products fetched successfully', products });
+    const cached = await redisCache.getJson(cacheKey);
+    if (cached) {
+      res.set('X-Cache', 'HIT');
+      res.status(200).json(cached);
+      return;
+    }
+
+    const products = await Product.find().sort({ createdAt: -1 }).lean();
+    const response = {
+      message: 'Products fetched successfully',
+      products,
+      timestamp: Date.now(),
+    };
+
+    await redisCache.setJson(cacheKey, response, 300);
+
+    res.set('X-Cache', 'MISS');
+
+    res.status(200).json(response);
+    return;
   } catch (error) {
     console.log('Error fetching all products:', error);
     res
@@ -132,18 +155,39 @@ export const getProductById = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
+  
   try {
     const { id } = req.params;
     if (!id || !mongoose.Types.ObjectId.isValid(id)) {
       res.status(400).json({ message: 'Invalid product ID format' });
       return;
     }
+    const cacheKey = generateCacheKey.productDetail(id);
+    const cached = await redisCache.getJson(cacheKey);
+    
+    if (cached) {
+      res.set('X-Cache', 'HIT');
+       res.status(200).json(cached);
+       return
+    }
+
     const product = await Product.findById(id);
     if (!product) {
-      res.status(404).json({ message: 'Product not found' });
-      return;
+      
+      await redisCache.setJson(cacheKey, { message: 'Product not found' }, 60);
+       res.status(404).json({ message: 'Product not found' });
+       return
     }
-    res.status(200).json({ message: 'Product fetched successfully', product });
+
+    const response = { 
+      message: 'Product fetched successfully', 
+      product: product.toObject() 
+    };
+
+    await redisCache.setJson(cacheKey, response, 3600); 
+    
+    res.set('X-Cache', 'MISS');
+    res.status(200).json(response);
   } catch (error) {
     console.log('Error fetching product by ID:', error);
     res.status(500).json({ message: 'Server error. Failed to fetch product.' });
@@ -172,12 +216,10 @@ export const updateProduct = async (
         (s) => !Object.values(ProductSize).includes(s as ProductSize),
       );
       if (invalidSizes.length > 0) {
-        res
-          .status(400)
-          .json({
-            success: false,
-            message: `Invalid sizes: ${invalidSizes.join(', ')}`,
-          });
+        res.status(400).json({
+          success: false,
+          message: `Invalid sizes: ${invalidSizes.join(', ')}`,
+        });
         return;
       }
       product.sizes = sizesArray as ProductSize[];
@@ -188,12 +230,10 @@ export const updateProduct = async (
         (c) => !Object.values(ProductColor).includes(c as ProductColor),
       );
       if (invalidColors.length > 0) {
-        res
-          .status(400)
-          .json({
-            success: false,
-            message: `Invalid colors: ${invalidColors.join(', ')}`,
-          });
+        res.status(400).json({
+          success: false,
+          message: `Invalid colors: ${invalidColors.join(', ')}`,
+        });
         return;
       }
       product.colors = colorsArray as ProductColor[];
@@ -240,6 +280,9 @@ export const updateProduct = async (
 
     await product.save();
 
+    await invalidateProductCaches(id);
+
+
     res.status(200).json({ message: 'Product updated successfully', product });
   } catch (error) {
     console.log('Error updating product:', error);
@@ -270,9 +313,14 @@ export const deleteProduct = async (
     }
 
     await Product.findByIdAndDelete(id);
+
+    await invalidateProductCaches(id);
+
+
     res.status(200).json({ message: 'Product deleted successfully' });
   } catch (error) {
     console.log('Error deleting product:', error);
     res.status(500).json({ message: 'Failed to delete product' });
   }
 };
+

@@ -114,8 +114,8 @@ async function handleCheckoutSessionCompleted(session: ExtendedCheckoutSession) 
         product: (item.product as IProducts)._id,
         quantity: item.quantity,
         price: (item.product as IProducts).price,
-        size: item.size,    // Include size
-        color: item.color  // Include color
+        size: item.size,    
+        color: item.color  
       };
     });
 

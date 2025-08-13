@@ -30,4 +30,7 @@ const ProductSchema = new Schema<IProducts>({
   createdBy: { type: Schema.Types.ObjectId, ref: "Users", required: true },
 }, { timestamps: true });
 
+ProductSchema.index({ createdAt: -1 });
+ProductSchema.index({ title: 'text', description: 'text' });
+
 export default mongoose.model<IProducts>("Product", ProductSchema);

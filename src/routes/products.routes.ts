@@ -8,20 +8,19 @@ import {
 } from '../controllers/product.controller';
 import authMiddleware from '../middlewares/auth.middleware';
 import adminMiddleware from '../middlewares/admin.middleware';
-import { ProductType } from '../types/types';
-import Product from '../models/product.model';
 import { uploadProductAssets } from '../middlewares/upload.middleware';
+import { cacheControl, cacheMiddleware } from '../middlewares/cache.middleware';
 
 const productsRouter = Router();
 
-productsRouter.get('/', getAllProducts);
-productsRouter.get('/:id', getProductById);
+productsRouter.get('/', cacheControl(300), cacheMiddleware(), getAllProducts);
+productsRouter.get('/:id',cacheControl(3600), cacheMiddleware(), getProductById);
 
 productsRouter.post(
   '/create',
   authMiddleware,
   adminMiddleware,
-   uploadProductAssets,
+  uploadProductAssets,
   createProduct,
 );
 
@@ -29,7 +28,7 @@ productsRouter.put(
   '/:id',
   authMiddleware,
   adminMiddleware,
-   uploadProductAssets,
+  uploadProductAssets,
   updateProduct,
 );
 

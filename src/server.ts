@@ -9,8 +9,8 @@ import productsRouter from "./routes/products.routes";
 import cartRouter from "./routes/cart.routes";
 import checkoutRouter from "./routes/checkout.routes";
 import orderRouter from "./routes/orders.routes";
-// import { stripeWebhook } from "./controllers/checkout.controller";
-// import bodyParser from "body-parser";
+import compression from 'compression';
+
 
 if (process.env.NODE_ENV === 'production') {
   import('./utils/self-ping')
@@ -20,6 +20,10 @@ dotenv.config();
 
 const app = express();
 const PORT = config.PORT || 3000;
+
+app.use(compression());
+
+app.set('etag', 'strong'); 
 
 const allowedOrigins = [
   'http://localhost:3000',
