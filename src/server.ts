@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 import express, { Request, Response, NextFunction } from "express";
 import config from "./config/config";
-import cors from "cors"
+import cors, { CorsOptions } from "cors"
 import usersRouter from "./routes/users.routes";
 import connectDB from "./config/db";
 import errorMiddleware from "./middlewares/error.middleware";
@@ -32,19 +32,21 @@ const allowedOrigins = [
   'https://tyhub-admin.vercel.app',
 ];
 
-// ✅ Use CORS before routes
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
+const corsOptions: CorsOptions = {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
     }
-    return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-}));
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+};
+
+
+app.use(cors(corsOptions));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
