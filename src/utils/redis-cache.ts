@@ -14,22 +14,22 @@ export const generateCacheKey = {
   };
 
 
-export const invalidateProductCaches = async (productId?: string) => {
+  export const invalidateProductCaches = async (productId?: string) => {
     try {
       if (productId) {
         await redisCache.del(generateCacheKey.productDetail(productId));
       }
-      await redisCache.deletePattern(generateCacheKey.productList('*'));
-      await redisCache.deletePattern(generateCacheKey.productSearch('*'));
+      await redisCache.deletePattern("products:list*");
+      await redisCache.deletePattern("products:search*");
     } catch (error: unknown) {
-        if (error instanceof Error) {
-          logger.error(`Cache invalidation error: ${error.message}`);
-        } else {
-          logger.error('Unknown cache invalidation error occurred');
-        }
+      if (error instanceof Error) {
+        logger.error(`Cache invalidation error: ${error.message}`);
+      } else {
+        logger.error('Unknown cache invalidation error occurred');
       }
+    }
   };
-
+  
   export const getCacheStatus = async (req: Request, res: Response) => {
     try {
       const pingResponse = await redisCache.ping();
