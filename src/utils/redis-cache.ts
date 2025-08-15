@@ -30,15 +30,19 @@ export const invalidateProductCaches = async (productId?: string) => {
       }
   };
 
-//   export const getCacheStatus = async (req: Request, res: Response) => {
-//     try {
-//       const pingResponse = await redisCache.ping();
-//       res.status(200).json({
-//         status: pingResponse === 'PONG' ? 'healthy' : 'unhealthy',
-//         response: pingResponse,
-//       });
-//     } catch (error) {
-//       res.status(500).json({ status: 'unhealthy', error: error.message });
-//     }
-//   };
+  export const getCacheStatus = async (req: Request, res: Response) => {
+    try {
+      const pingResponse = await redisCache.ping();
+      res.status(200).json({
+        status: pingResponse === 'PONG' ? 'healthy' : 'unhealthy',
+        response: pingResponse,
+      });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown cache error';
+      res.status(500).json({ 
+        status: 'unhealthy', 
+        error: errorMessage 
+      });
+    }
+  };
   

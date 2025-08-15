@@ -4,8 +4,8 @@ import logger from './logger.config';
 // Cache duration in seconds (1 hour)
 const DEFAULT_CACHE_DURATION = 3600;
 
-// Type for Redis errors
-type RedisError = Error & { 
+// Extended Redis error type
+type RedisError = Error & {
   code?: string;
   command?: string;
   args?: any[];
@@ -16,25 +16,35 @@ class RedisCache {
   private static instance: RedisCache;
 
   private constructor() {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const isTls = process.env.REDIS_TLS === 'true';
+  
     const options: RedisOptions = {
       host: process.env.REDIS_HOST || 'localhost',
       port: parseInt(process.env.REDIS_PORT || '6379'),
+      username: isProduction ? process.env.REDIS_USER || 'default' : undefined,
       password: process.env.REDIS_PASSWORD,
       db: parseInt(process.env.REDIS_DB || '0'),
-      retryStrategy: (times) => {
-        // Exponential backoff
-        const delay = Math.min(times * 100, 5000);
-        return delay;
-      },
+      
+      
+      ...(isTls ? {
+        tls: {
+          rejectUnauthorized: false 
+        }
+      } : {}),
+      
+      
+      retryStrategy: (times) => Math.min(times * 100, 5000),
       maxRetriesPerRequest: 3,
       enableOfflineQueue: true,
+      connectTimeout: 10000, 
+      commandTimeout: 5000   
     };
-
+  
     this.client = new Redis(options);
     this.registerEvents();
   }
 
-  // Singleton pattern
   public static getInstance(): RedisCache {
     if (!RedisCache.instance) {
       RedisCache.instance = new RedisCache();
@@ -64,30 +74,39 @@ class RedisCache {
     });
   }
 
-  // Basic cache operations
+  private handleRedisError(error: unknown, context: string): RedisError {
+    if (error instanceof Error) {
+      const redisError = error as RedisError;
+      logger.error(`Redis ${context} error: ${redisError.message}`);
+      return redisError;
+    }
+    logger.error(`Unknown Redis ${context} error occurred`);
+    return new Error(`Unknown Redis ${context} error`) as RedisError;
+  }
+
   public async set(
     key: string,
     value: string,
     duration: number = DEFAULT_CACHE_DURATION
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       if (duration > 0) {
         await this.client.setex(key, duration, value);
       } else {
         await this.client.set(key, value);
       }
-    } catch (err: unknown) {
-      const error = err as RedisError;
-      logger.error(`Redis set error: ${error.message}`);
+      return true;
+    } catch (error: unknown) {
+      this.handleRedisError(error, 'set operation');
+      return false;
     }
   }
 
   public async get(key: string): Promise<string | null> {
     try {
       return await this.client.get(key);
-    } catch (err: unknown) {
-      const error = err as RedisError;
-      logger.error(`Redis get error: ${error.message}`);
+    } catch (error: unknown) {
+      this.handleRedisError(error, 'get operation');
       return null;
     }
   }
@@ -95,103 +114,93 @@ class RedisCache {
   public async del(key: string): Promise<number> {
     try {
       return await this.client.del(key);
-    } catch (err: unknown) {
-      const error = err as RedisError;
-      logger.error(`Redis delete error: ${error.message}`);
+    } catch (error: unknown) {
+      this.handleRedisError(error, 'delete operation');
       return 0;
     }
   }
 
-  public async flushAll(): Promise<void> {
+  public async flushAll(): Promise<boolean> {
     try {
       await this.client.flushall();
-    } catch (err: unknown) {
-      const error = err as RedisError;
-      logger.error(`Redis flushAll error: ${error.message}`);
+      return true;
+    } catch (error: unknown) {
+      this.handleRedisError(error, 'flushAll operation');
+      return false;
     }
   }
 
-  // JSON helpers
   public async setJson(
     key: string,
     value: any,
     duration: number = DEFAULT_CACHE_DURATION
-  ): Promise<void> {
-    await this.set(key, JSON.stringify(value), duration);
-  }
-
-  private async handleCacheOperation<T>(operation: () => Promise<T>, context: string): Promise<T | null> {
+  ): Promise<boolean> {
     try {
-      return await operation();
-    } catch (error) {
-      logger.error(`Cache ${context} error: ${error.message}`);
-      return null; // Fail gracefully
+      const stringValue = JSON.stringify(value);
+      return await this.set(key, stringValue, duration);
+    } catch (error: unknown) {
+      this.handleRedisError(error, 'setJson operation');
+      return false;
     }
   }
 
   public async getJson<T>(key: string): Promise<T | null> {
-    return this.handleCacheOperation<T>(
-      async () => {
-        const data = await this.client.get(key);
-        return data ? JSON.parse(data) : null;
-      },
-      'get'
-    );
-  }
-
-  // Pattern-based deletion
-  public async deletePattern(pattern: string): Promise<void> {
     try {
-      const stream = this.client.scanStream({
-        match: pattern,
-      });
-
-      stream.on('data', (keys: string[]) => {
-        if (keys.length) {
-          const pipeline = this.client.pipeline();
-          keys.forEach((key) => pipeline.del(key));
-          pipeline.exec().catch((err: RedisError) => {
-            logger.error(`Pipeline exec error: ${err.message}`);
-          });
-        }
-      });
-
-      await new Promise((resolve) => {
-        stream.on('end', resolve);
-      });
-    } catch (err: unknown) {
-      const error = err as RedisError;
-      logger.error(`Redis deletePattern error: ${error.message}`);
+      const data = await this.get(key);
+      if (!data) return null;
+      return JSON.parse(data) as T;
+    } catch (error: unknown) {
+      this.handleRedisError(error, 'getJson operation');
+      return null;
     }
   }
 
-  // Close connection
-  public async disconnect(): Promise<void> {
+  public async deletePattern(pattern: string): Promise<boolean> {
+    try {
+      const keys: string[] = [];
+      const stream = this.client.scanStream({ match: pattern });
+
+      await new Promise<void>((resolve, reject) => {
+        stream.on('data', (foundKeys: string[]) => {
+          keys.push(...foundKeys);
+        });
+        stream.on('end', resolve);
+        stream.on('error', reject);
+      });
+
+      if (keys.length > 0) {
+        await this.client.del(...keys);
+      }
+      return true;
+    } catch (error: unknown) {
+      this.handleRedisError(error, 'deletePattern operation');
+      return false;
+    }
+  }
+
+  public async disconnect(): Promise<boolean> {
     try {
       await this.client.quit();
-    } catch (err: unknown) {
-      const error = err as RedisError;
-      logger.error(`Redis disconnect error: ${error.message}`);
+      return true;
+    } catch (error: unknown) {
+      this.handleRedisError(error, 'disconnect operation');
+      return false;
     }
   }
 
-  // Health check
   public async ping(): Promise<string> {
     try {
       return await this.client.ping();
-    } catch (err: unknown) {
-      const error = err as RedisError;
-      logger.error(`Redis ping error: ${error.message}`);
-      return 'Redis not available';
+    } catch (error: unknown) {
+      const err = this.handleRedisError(error, 'ping operation');
+      return `Redis not available: ${err.message}`;
     }
   }
 
-  // Cluster support
   public isCluster(): boolean {
     return this.client instanceof Redis.Cluster;
   }
 }
 
 const redisCache = RedisCache.getInstance();
-
 export default redisCache;
