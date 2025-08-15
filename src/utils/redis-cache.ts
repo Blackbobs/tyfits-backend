@@ -3,32 +3,50 @@ import logger from "../config/logger.config";
 import redisCache from "../config/redis.config";
 
 export const generateCacheKey = {
-    productList: (queryParams = {}) => {
-      const queryString = Object.keys(queryParams).length > 0 
-        ? `:${JSON.stringify(queryParams)}` 
-        : '';
-      return `products:list${queryString}`;
-    },
-    productDetail: (id: string) => `products:detail:${id}`,
-    productSearch: (searchParams: any) => `products:search:${JSON.stringify(searchParams)}`
-  };
+  productList: (queryParams: Record<string, any> = {}) => {
+    const keys = Object.keys(queryParams).sort();
+    if (keys.length === 0) return `products:list`;
 
+    const queryString = keys
+      .map((key) => `${key}=${encodeURIComponent(queryParams[key])}`)
+      .join("&");
 
-  export const invalidateProductCaches = async (productId?: string) => {
-    try {
-      if (productId) {
-        await redisCache.del(generateCacheKey.productDetail(productId));
-      }
-      await redisCache.deletePattern("products:list*");
-      await redisCache.deletePattern("products:search*");
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        logger.error(`Cache invalidation error: ${error.message}`);
-      } else {
-        logger.error('Unknown cache invalidation error occurred');
-      }
+    return `products:list:${queryString}`;
+  },
+
+  productDetail: (id: string) => `products:detail:${id}`,
+
+  productSearch: (searchParams: Record<string, any> = {}) => {
+    const keys = Object.keys(searchParams).sort();
+    if (keys.length === 0) return `products:search`;
+
+    const queryString = keys
+      .map((key) => `${key}=${encodeURIComponent(searchParams[key])}`)
+      .join("&");
+
+    return `products:search:${queryString}`;
+  }
+};
+
+export const invalidateProductCaches = async (productId?: string) => {
+  try {
+    if (productId) {
+      await redisCache.del(generateCacheKey.productDetail(productId));
     }
-  };
+
+    // Wipe all product lists and searches
+    await redisCache.deletePattern("products:list*");
+    await redisCache.deletePattern("products:search*");
+
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      logger.error(`Cache invalidation error: ${error.message}`);
+    } else {
+      logger.error("Unknown cache invalidation error occurred");
+    }
+  }
+};
+
   
   export const getCacheStatus = async (req: Request, res: Response) => {
     try {

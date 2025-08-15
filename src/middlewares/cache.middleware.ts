@@ -1,30 +1,48 @@
 import { NextFunction, Request, Response } from "express";
 import redisCache from "../config/redis.config";
 import logger from "../config/logger.config";
+import { generateCacheKey } from "../utils/redis-cache";
 
 export const cacheMiddleware = (duration: number = 3600) => {
   return async (req: Request, res: Response, next: NextFunction) => {
-    const key = `cache:${req.originalUrl}`;
-    
+    let key: string;
+
+    // Match by route or path
+    if (req.path.startsWith("/products") && req.method === "GET") {
+      if (req.params.id) {
+        // Product detail
+        key = generateCacheKey.productDetail(req.params.id);
+      } else if (req.path.includes("/search")) {
+        // Product search
+        key = generateCacheKey.productSearch(req.query);
+      } else {
+        // Product list
+        key = generateCacheKey.productList(req.query);
+      }
+    } else {
+      // Fallback for other routes
+      key = `cache:${req.originalUrl}`;
+    }
+
     try {
       const cached = await redisCache.getJson<unknown>(key);
       if (cached) {
-         res.status(200).json(cached);
-         return
+        res.set("X-Cache", "HIT");
+        res.status(200).json(cached);
+        return;
       }
-      
-      // Store original json method
+
       const originalJson = res.json.bind(res);
-      
-      // Override res.json to cache responses
       res.json = (body: any) => {
-        redisCache.setJson(key, body, duration)
+        redisCache
+          .setJson(key, body, duration)
           .catch((err: Error) => {
             logger.error(`Cache set error: ${err.message}`);
           });
+        res.set("X-Cache", "MISS");
         return originalJson(body);
       };
-      
+
       next();
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -36,6 +54,7 @@ export const cacheMiddleware = (duration: number = 3600) => {
     }
   };
 };
+
 
 export const cacheControl = (duration: number) => (
     req: Request,
