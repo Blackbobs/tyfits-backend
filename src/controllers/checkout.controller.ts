@@ -79,12 +79,12 @@ export const createCheckoutSession = async (req: Request, res: Response) => {
       shipping_options: [
         {
           shipping_rate_data: {
-            display_name: "Domestic Shipping",
+            display_name: "Domestic Shipping(US)",
             type: "fixed_amount",
             fixed_amount: { amount: 1000, currency: "usd" }, 
             delivery_estimate: {
               minimum: { unit: "business_day", value: 3 },
-              maximum: { unit: "business_day", value: 5 },
+              maximum: { unit: "business_day", value: 4 },
             },
           },
         },
