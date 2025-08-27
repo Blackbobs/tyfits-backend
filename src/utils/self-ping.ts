@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import axios from 'axios';
 
-const YOUR_SERVER_URL = 'https://mage-waitlist-api.onrender.com/ping'; 
+const YOUR_SERVER_URL = 'https://tyfits-backend.onrender.com'; 
 
 cron.schedule('*/14 * * * *', async () => {
   try {

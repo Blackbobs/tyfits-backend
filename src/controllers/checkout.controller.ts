@@ -74,8 +74,32 @@ export const createCheckoutSession = async (req: Request, res: Response) => {
       cancel_url: `${process.env.CLIENT_URL}`,
       customer_email: userEmail,
       shipping_address_collection: {
-        allowed_countries: ["US", "CA", "GB", "NG"],
+        allowed_countries: ["US", "CA", "GB", "NG", "AU", "IN"],
       },
+      shipping_options: [
+        {
+          shipping_rate_data: {
+            display_name: "Domestic Shipping",
+            type: "fixed_amount",
+            fixed_amount: { amount: 1000, currency: "usd" }, 
+            delivery_estimate: {
+              minimum: { unit: "business_day", value: 3 },
+              maximum: { unit: "business_day", value: 5 },
+            },
+          },
+        },
+        {
+          shipping_rate_data: {
+            display_name: "International Shipping",
+            type: "fixed_amount",
+            fixed_amount: { amount: 5000, currency: "usd" }, 
+            delivery_estimate: {
+              minimum: { unit: "business_day", value: 7 },
+              maximum: { unit: "business_day", value: 14 },
+            },
+          },
+        },
+      ],
       phone_number_collection: { enabled: true },
       metadata: {
         userId: userId.toString(),
